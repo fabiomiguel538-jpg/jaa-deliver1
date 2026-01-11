@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { UserRole, Order, OrderStatus, DriverProfile, DriverRegistrationStatus, StoreProfile, StoreRegistrationStatus, Location, RechargeRequest, RechargeRequestStatus, PlatformSettings, WithdrawalRequest, WithdrawalRequestStatus } from './types';
 import StoreDashboard from './components/StoreDashboard';
 import DriverDashboard from './components/DriverDashboard';
@@ -211,6 +212,7 @@ const App: React.FC = () => {
           {role === UserRole.ADMIN && ( <AdminDashboard onLogout={handleLogout} orders={globalOrders} settings={platformSettings} onUpdateSettings={setPlatformSettings} allDrivers={drivers} onApproveDriver={(id) => setDrivers(prev => prev.map(d => d.id === id ? { ...d, status: DriverRegistrationStatus.APPROVED } : d))} onRejectDriver={(id) => setDrivers(prev => prev.map(d => d.id === id ? { ...d, status: DriverRegistrationStatus.REJECTED } : d))} allStores={stores} onApproveStore={(id) => setStores(prev => prev.map(s => s.id === id ? { ...s, status: StoreRegistrationStatus.APPROVED } : s))} onRejectStore={(id) => setStores(prev => prev.map(s => s.id === id ? { ...s, status: StoreRegistrationStatus.REJECTED } : s))} onApproveAccess={(id, type) => { const now = new Date(); const expiry = type === 'DAILY' ? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).getTime() : now.getTime() + (30 * 24 * 60 * 60 * 1000); setStores(prev => prev.map(s => s.id === id ? { ...s, accessValidity: expiry, accessRequestType: undefined } : s)); }} rechargeRequests={rechargeRequests} onApproveRecharge={(id) => { const req = rechargeRequests.find(r => r.id === id); if (req) { setStores(prev => prev.map(s => s.id === req.storeId ? { ...s, balance: s.balance + req.amount } : s)); setRechargeRequests(prev => prev.map(r => r.id === id ? { ...r, status: RechargeRequestStatus.APPROVED } : r)); } }} onRejectRecharge={(id) => setRechargeRequests(prev => prev.map(r => r.id === id ? { ...r, status: RechargeRequestStatus.REJECTED } : r))} withdrawalRequests={withdrawalRequests} onApproveWithdrawal={handleApproveWithdrawal} onRejectWithdrawal={handleRejectWithdrawal} onApprovePayment={handleApprovePayment} onRejectPayment={handleRejectPayment} /> )}
         </div>
       )}
+      <Analytics />
     </div>
   );
 };
