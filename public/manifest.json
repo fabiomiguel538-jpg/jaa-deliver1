@@ -1,0 +1,64 @@
+
+{
+  "name": "PedeJá - Entregas Rápidas",
+  "short_name": "PedeJá",
+  "description": "Logística Inteligente e Entregas Rápidas para Lojas e Motoboys",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#F84F39",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova Entrega",
+      "short_name": "Entregar",
+      "description": "Abrir tela de novo pedido",
+      "url": "./?action=new_order",
+      "icons": [{ "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Minhas Corridas",
+      "short_name": "Corridas",
+      "description": "Ver histórico de entregas",
+      "url": "./?action=history",
+      "icons": [{ "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "PedeJá Dashboard"
+    },
+    {
+      "src": "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "PedeJá Mobile"
+    }
+  ]
+}

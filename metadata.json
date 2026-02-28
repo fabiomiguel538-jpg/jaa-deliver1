@@ -1,5 +1,5 @@
 {
-  "name": "MotoRush Delivery Hub",
+  "name": "Jaa Delivery Hub",
   "description": "A comprehensive delivery management platform for stores, drivers (motoboys), and administrators with real-time tracking, dynamic pricing, and automated matching.",
   "requestFramePermissions": [
     "camera",

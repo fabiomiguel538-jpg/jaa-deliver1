@@ -1,9 +1,10 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
-// Always use process.env.API_KEY directly for initialization.
+// Fix: Always use direct environment variable for API Key initialization
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// Fix: Using gemini-3-flash-preview for basic logistics analysis tasks
 export const getSmartMatchingInsights = async (driverCount: number, orderHeatMap: any) => {
   try {
     const response = await ai.models.generateContent({
@@ -26,7 +27,6 @@ export const getSmartMatchingInsights = async (driverCount: number, orderHeatMap
 export const searchNearbyPlaces = async (query: string, lat: number, lng: number) => {
   try {
     const response = await ai.models.generateContent({
-      // Use gemini-2.5-flash for Maps grounding as specified in the 2.5 series requirement.
       model: "gemini-2.5-flash",
       contents: query,
       config: {

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Location } from '../types';
 
@@ -73,10 +72,12 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
       try {
         const lat = sanitizeCoord(userLocation!.lat, -23.55);
         const lng = sanitizeCoord(userLocation!.lng, -46.63);
-        mapRef.current.flyTo([lat, lng], mapRef.current.getZoom(), {
-          duration: 1.5,
-          animate: true
-        });
+        if (isValidNumber(lat) && isValidNumber(lng)) {
+            mapRef.current.flyTo([lat, lng], mapRef.current.getZoom(), {
+              duration: 1.5,
+              animate: true
+            });
+        }
       } catch (err) {
         console.warn("Mapa centralização ignorada", err);
       }
@@ -96,14 +97,16 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
       try {
         const lat = sanitizeCoord(userLocation!.lat, -23.55);
         const lng = sanitizeCoord(userLocation!.lng, -46.63);
-        circleRef.current = L.circle([lat, lng], {
-          radius: radiusKm * 1000,
-          color: '#F84F39',
-          fillColor: '#FFB800',
-          fillOpacity: 0.1,
-          weight: 2,
-          dashArray: '5, 10'
-        }).addTo(mapRef.current);
+        if (isValidNumber(lat) && isValidNumber(lng)) {
+            circleRef.current = L.circle([lat, lng], {
+              radius: radiusKm * 1000,
+              color: '#F84F39',
+              fillColor: '#FFB800',
+              fillOpacity: 0.1,
+              weight: 2,
+              dashArray: '5, 10'
+            }).addTo(mapRef.current);
+        }
       } catch (e) {
         console.warn("Erro ao desenhar raio:", e);
       }
@@ -128,6 +131,8 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
       const lat = sanitizeCoord(m.location.lat, 0);
       const lng = sanitizeCoord(m.location.lng, 0);
       
+      if (!isValidNumber(lat) || !isValidNumber(lng)) return;
+
       let iconColor = '#0085FF';
       let iconEmoji = '🏍️';
       let extraClass = '';

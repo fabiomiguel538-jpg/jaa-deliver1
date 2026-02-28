@@ -16,6 +16,8 @@ const DriverRegistration: React.FC<DriverRegistrationProps> = ({ onSignup, onBac
     name: '',
     email: '',
     taxId: '',
+    phone: '',
+    whatsapp: '',
     vehicle: '',
     plate: '',
     cep: '',
@@ -65,8 +67,8 @@ const DriverRegistration: React.FC<DriverRegistrationProps> = ({ onSignup, onBac
     e.preventDefault();
     
     if (activeTab === 'data') {
-      const { name, email, taxId, vehicle, plate, city, password, cep } = form;
-      if (name && email && taxId && vehicle && plate && city && password && cep) {
+      const { name, email, taxId, phone, whatsapp, vehicle, plate, city, password, cep } = form;
+      if (name && email && taxId && phone && whatsapp && vehicle && plate && city && password && cep) {
         setActiveTab('documents');
         window.scrollTo(0, 0);
       } else {
@@ -157,6 +159,27 @@ const DriverRegistration: React.FC<DriverRegistrationProps> = ({ onSignup, onBac
                     className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-semibold focus:border-[#F84F39] transition-all"
                     value={form.email}
                     onChange={e => setForm({...form, email: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Telefone</label>
+                  <input 
+                    type="text" required placeholder="(00) 0000-0000"
+                    className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-semibold focus:border-[#F84F39] transition-all"
+                    value={form.phone}
+                    onChange={e => setForm({...form, phone: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp</label>
+                  <input 
+                    type="text" required placeholder="(00) 90000-0000"
+                    className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-semibold focus:border-[#F84F39] transition-all"
+                    value={form.whatsapp}
+                    onChange={e => setForm({...form, whatsapp: e.target.value})}
                   />
                 </div>
               </div>

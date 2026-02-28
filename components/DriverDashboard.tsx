@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Order, OrderStatus, DriverProfile, Location, DriverRegistrationStatus, PlatformSettings, WithdrawalRequest, WithdrawalRequestStatus } from '../types';
 import MapView from './MapView';
+import { APP_LOGO } from '../constants';
 
 interface DriverDashboardProps {
   onLogout: () => void;
   availableOrders: Order[];
+  scheduledOrders: Order[];
   activeOrders: Order[];
   allOrders: Order[]; 
   onUpdateStatus: (id: string, status: OrderStatus, driverId?: string) => void;
+  onReportReturn: (orderId: string) => void;
   balance: number;
   profile: DriverProfile;
   settings: PlatformSettings;
@@ -16,53 +19,116 @@ interface DriverDashboardProps {
   onToggleOnline: (driverId: string, isOnline: boolean) => void;
   onUpdateLocation: (driverId: string, location: Location) => void;
   onUpdateProfile: (driverId: string, data: Partial<DriverProfile>) => void;
+  onRefresh: () => void;
+  isSyncing: boolean;
 }
 
-const formatDateTime = (timestamp: number) => new Date(timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const formatDateTime = (timestamp: number) => {
+  try {
+    return new Date(timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return 'N/A';
+  }
+};
 
 const DriverDashboard: React.FC<DriverDashboardProps> = ({ 
-  onLogout, availableOrders, activeOrders, allOrders, onUpdateStatus, balance, profile, settings, withdrawalRequests, onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile 
+  onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing
 }) => {
-  const isOnline = profile.isOnline || false;
-  const activeOrder = activeOrders[0] || null;
+  const isOnline = profile?.isOnline || false;
+  const isRouteActive = activeOrders.length > 0;
+  const isMultiRoute = activeOrders.length > 1;
+  const commonStatus = activeOrders[0]?.status || OrderStatus.SEARCHING;
+
+  // Lógica de Retorno: Pedidos entregues mas com taxa de retorno pendente de liberação pela loja
+  const returningOrders = useMemo(() => {
+    if (!profile?.id) return [];
+    return allOrders.filter(o => 
+      o.driverId === profile.id && 
+      o.status === OrderStatus.DELIVERED && 
+      o.hasReturnFee === true && 
+      o.returnFeePaid !== true
+    );
+  }, [allOrders, profile?.id]);
+
+  const isReturning = returningOrders.length > 0;
+
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [showNewOrderAlert, setShowNewOrderAlert] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isGpsLoading, setIsGpsLoading] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
-  const [activeTab, setActiveTab] = useState<'orders' | 'history'>('orders');
-  const [deliveryCodeInput, setDeliveryCodeInput] = useState('');
+  const [activeTab, setActiveTab] = useState<'orders' | 'scheduled' | 'history'>('orders');
+  const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   
+  const lastAvailableCount = useRef<number>();
+
   const [tempProfile, setTempProfile] = useState({
-    name: profile.name || '',
-    cep: profile.cep || '',
-    city: profile.city || '',
-    pixKey: profile.pixKey || '',
-    currentLocation: profile.currentLocation || { lat: -23.55, lng: -46.63 }
+    name: profile?.name || '',
+    cep: profile?.cep || '',
+    city: profile?.city || '',
+    pixKey: profile?.pixKey || '',
+    currentLocation: profile?.currentLocation || { lat: -23.55, lng: -46.63 }
   });
 
-  const cityOrders = availableOrders.filter(o => 
-    o.storeCity?.toLowerCase().trim() === profile.city?.toLowerCase().trim()
-  );
+  const cityOrders = useMemo(() => {
+    const driverCity = (profile?.city || "").toLowerCase().trim();
+    return availableOrders.filter(o => 
+      (o.storeCity || "").toLowerCase().trim() === driverCity
+    );
+  }, [availableOrders, profile?.city]);
 
-  const driverHistory = allOrders
-    .filter(o => o.driverId === profile.id && o.status === OrderStatus.DELIVERED)
-    .sort((a, b) => b.timestamp - a.timestamp);
+  const driverHistory = useMemo(() => {
+    return allOrders
+      .filter(o => o.driverId === profile?.id && o.status === OrderStatus.DELIVERED)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [allOrders, profile?.id]);
 
-  const lastAvailableCount = useRef(cityOrders.length);
-  const hasPendingWithdrawal = withdrawalRequests.some(r => r.driverId === profile.id && r.status === WithdrawalRequestStatus.PENDING);
+  const hasPendingWithdrawal = useMemo(() => {
+    return withdrawalRequests.some(r => r.driverId === profile?.id && r.status === WithdrawalRequestStatus.PENDING);
+  }, [withdrawalRequests, profile?.id]);
 
+  const handleToggleOnlineStatus = () => {
+    const nextStatus = !isOnline;
+    if (nextStatus) {
+      if ("Notification" in window && Notification.permission !== "granted") {
+          Notification.requestPermission();
+      }
+    }
+    onToggleOnline(profile.id, nextStatus);
+  };
+  
+  // CORREÇÃO CRÍTICA: Notificações no Chrome Mobile podem causar Crash (TypeError)
   useEffect(() => {
-    if (isOnline && cityOrders.length > lastAvailableCount.current) {
-      setShowNewOrderAlert(true);
-      setTimeout(() => setShowNewOrderAlert(false), 5000);
+    if (lastAvailableCount.current === undefined) {
+      lastAvailableCount.current = cityOrders.length;
+      return;
+    }
+
+    if (isOnline && cityOrders.length > 0 && cityOrders.length > lastAvailableCount.current) {
+      const newestOrder = cityOrders.reduce((a, b) => (b.timestamp > a.timestamp ? b : a), cityOrders[0]);
+      const displayEarning = (newestOrder?.driverEarning || 0) + (newestOrder?.hasReturnFee ? (newestOrder?.returnFeePrice || 0) : 0);
+      
+      // Chrome para Android não suporta "new Notification()". Ele usa "ServiceWorkerRegistration.showNotification()".
+      // Para evitar que o app trave com tela branca, verificamos se o construtor é uma função válida no contexto.
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          // Apenas tenta instanciar se não for Chrome Mobile (que dispara erro ao usar o construtor diretamente)
+          new Notification("🚀 Nova Corrida!", {
+            body: `R$ ${displayEarning.toFixed(2)} - ${newestOrder?.pickup?.address || 'PedeJá'}`,
+            icon: APP_LOGO,
+            badge: APP_LOGO,
+            tag: "new-order",
+          });
+        } catch (e) {
+          console.warn("Nativo de notificações não disponível neste navegador/dispositivo.");
+        }
+      }
     }
     lastAvailableCount.current = cityOrders.length;
-  }, [cityOrders.length, isOnline]);
+  }, [cityOrders, isOnline]);
 
   useEffect(() => {
     let watchId: number;
-    if (isOnline && profile.status === DriverRegistrationStatus.APPROVED) {
+    if (isOnline && profile?.status === DriverRegistrationStatus.APPROVED) {
       if ('geolocation' in navigator) {
         watchId = navigator.geolocation.watchPosition(
           (position) => {
@@ -76,7 +142,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       }
     }
     return () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
-  }, [isOnline, profile.id, profile.status, onUpdateLocation]);
+  }, [isOnline, profile?.id, profile?.status, onUpdateLocation]);
 
   const handleUseGps = () => {
     if (!navigator.geolocation) return;
@@ -107,49 +173,53 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     setIsEditingProfile(false);
   };
 
-  const handleStatusUpdate = () => {
-    if (!activeOrder) return;
+  const handleGlobalStatusUpdate = () => {
+    if (activeOrders.length === 0) return;
+    const currentStatus = activeOrders[0].status;
     let nextStatus: OrderStatus | null = null;
-    switch (activeOrder.status) {
-        case OrderStatus.ACCEPTED: nextStatus = OrderStatus.PICKUP; break;
-        case OrderStatus.PICKUP: nextStatus = OrderStatus.IN_TRANSIT; break;
-        case OrderStatus.IN_TRANSIT: 
-            if (deliveryCodeInput.trim() === activeOrder.deliveryCode) {
-                nextStatus = OrderStatus.DELIVERED; 
-                setDeliveryCodeInput('');
-            } else {
-                alert("Código de entrega incorreto!");
-            }
-            break;
-    }
-    if (nextStatus) {
-        onUpdateStatus(activeOrder.id, nextStatus, profile.id);
+    if (currentStatus === OrderStatus.ACCEPTED) nextStatus = OrderStatus.PICKUP;
+    else if (currentStatus === OrderStatus.PICKUP) nextStatus = OrderStatus.IN_TRANSIT;
+    if (nextStatus) onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
+  };
+
+  const handleFinishDelivery = (order: Order) => {
+    if (!order.requiresDeliveryCode) {
+        onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
+    } else {
+        const code = deliveryCodes[order.id];
+        if (code?.trim() === order.deliveryCode) {
+            onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
+            setDeliveryCodes(prev => {
+              const next = {...prev};
+              delete next[order.id];
+              return next;
+            });
+        } else {
+            alert("Código de entrega incorreto para este pedido!");
+        }
     }
   };
 
   const handleWithdraw = () => {
-    if (!profile.pixKey) {
+    if (!profile?.pixKey) {
       alert("Por favor, cadastre sua Chave PIX nas configurações antes de solicitar um saque.");
       setIsEditingProfile(true);
       setWithdrawalAmount('');
       return;
     }
-
     const amount = parseFloat(withdrawalAmount);
-
     if (isNaN(amount) || amount <= 0) {
       alert("Por favor, insira um valor de saque válido.");
       return;
     }
-    if (amount < settings.minimumWithdrawalAmount) {
-      alert(`O valor mínimo para saque é de R$${settings.minimumWithdrawalAmount.toFixed(2)}.`);
+    if (amount < (settings?.minimumWithdrawalAmount || 80)) {
+      alert(`O valor mínimo para saque é de R$${(settings?.minimumWithdrawalAmount || 80).toFixed(2)}.`);
       return;
     }
     if (amount > balance) {
       alert("Você não pode sacar um valor maior que o seu saldo disponível.");
       return;
     }
-    
     onNewWithdrawalRequest(profile.id, profile.name, amount);
     setWithdrawalAmount('');
   };
@@ -158,124 +228,319 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     switch(status) {
         case OrderStatus.ACCEPTED: return "Cheguei para Coletar";
         case OrderStatus.PICKUP: return "Sair para Entrega";
-        case OrderStatus.IN_TRANSIT: return "Finalizar Entrega";
+        case OrderStatus.IN_TRANSIT: return "Manifesto de Entregas";
         default: return "Atualizar Status";
     }
   };
   
-  if (profile.status === DriverRegistrationStatus.PENDING) {
-    return <div className="h-screen bg-white flex flex-col items-center justify-center p-8 text-center"><div className="w-16 h-16 jaa-gradient rounded-3xl flex items-center justify-center text-white text-3xl mb-6 shadow-xl">⏳</div><h2 className="text-xl font-bold text-gray-800">Cadastro em Análise</h2><p className="text-gray-500 mt-2">Sua documentação foi recebida e está sendo verificada. Avisaremos assim que o processo for concluído.</p><button onClick={onLogout} className="mt-8 bg-gray-100 text-gray-700 font-bold py-3 px-6 rounded-xl text-sm">Sair</button></div>;
-  }
-  if (profile.status === DriverRegistrationStatus.REJECTED) {
-    return <div className="h-screen bg-white flex flex-col items-center justify-center p-8 text-center"><div className="w-16 h-16 bg-red-100 rounded-3xl flex items-center justify-center text-red-500 text-3xl mb-6">😞</div><h2 className="text-xl font-bold text-gray-800">Cadastro Recusado</h2><p className="text-gray-500 mt-2">Houve um problema com sua documentação. Por favor, entre em contato com o suporte para mais detalhes.</p><button onClick={onLogout} className="mt-8 bg-gray-100 text-gray-700 font-bold py-3 px-6 rounded-xl text-sm">Sair</button></div>;
-  }
-
-  const mapMarkers: { id: string; type: 'STORE' | 'DRIVER' | 'DROPOFF'; location: Location; name?: string; }[] = [];
-  if (profile.currentLocation) {
+  const mapMarkers: { id: string; type: 'STORE' | 'DRIVER' | 'DROPOFF' | 'ASSIGNED_DRIVER'; location: Location; name?: string; }[] = [];
+  if (profile?.currentLocation) {
     mapMarkers.push({ id: profile.id, type: 'DRIVER', location: profile.currentLocation, name: 'Você' });
   }
-  if (activeOrder) {
-    mapMarkers.push({ id: 'pickup', type: 'STORE', location: activeOrder.pickup, name: 'Coleta' });
-    mapMarkers.push({ id: 'dropoff', type: 'DROPOFF', location: activeOrder.dropoff, name: 'Entrega' });
+
+  // Lógica de Marcadores no Mapa
+  if (isRouteActive) {
+    mapMarkers.push({ id: 'pickup', type: 'STORE', location: activeOrders[0].pickup, name: 'Coleta' });
+    activeOrders.forEach(o => {
+      mapMarkers.push({ id: `drop-${o.id}`, type: 'DROPOFF', location: o.dropoff, name: `Entrega #${o.id}` });
+    });
+  } else if (isReturning && returningOrders[0]) {
+    mapMarkers.push({ id: 'return-store', type: 'STORE', location: returningOrders[0].pickup, name: 'Ponto de Retorno' });
   }
+
+  const totalRouteEarning = activeOrders.reduce((acc, o) => acc + (o.driverEarning || 0) + (o.hasReturnFee ? (o.returnFeePrice || 0) : 0), 0);
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#f7f7f7]">
-      {showNewOrderAlert && <div className="fixed top-4 left-1/2 -translate-x-1/2 jaa-gradient text-white px-6 py-3 rounded-2xl shadow-lg z-50 animate-bounce">⚡ Nova corrida disponível!</div>}
       <header className="sticky top-0 bg-white px-6 py-4 flex justify-between items-center border-b border-gray-100 z-40 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-lg font-jaa italic transition-colors ${isOnline ? 'jaa-gradient' : 'bg-gray-400'}`}>J</div>
-          <div><h2 className="text-sm font-black text-gray-800 uppercase tracking-tighter">{profile.name}</h2><span className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{profile.city}</span></div>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" checked={isOnline} onChange={() => onToggleOnline(profile.id, !isOnline)} className="sr-only peer" />
-            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#F84F39]"></div>
-          </label>
-          <button onClick={() => setIsEditingProfile(true)} className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-lg">⚙️</button>
-          <button onClick={onLogout} className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-lg">🚪</button>
-        </div>
-      </header>
-      
-      <div className="fixed top-[88px] left-0 right-0 h-40 bg-white -z-10"></div>
-      
-      <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6">
-        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
-          <div className="flex justify-between items-center">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
-            <h3 className="text-3xl font-black text-gray-800">R$ {balance.toFixed(2)}</h3>
-          </div>
-          
-          <div className="space-y-2 pt-4 border-t border-gray-50">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Valor a Sacar</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-gray-300">R$</span>
-              <input 
-                type="number"
-                value={withdrawalAmount}
-                onChange={e => setWithdrawalAmount(e.target.value)}
-                placeholder="0,00"
-                disabled={hasPendingWithdrawal}
-                className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl pl-12 pr-4 py-3 text-xl font-black text-gray-800 outline-none focus:border-[#F84F39] disabled:opacity-50"
-              />
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-base shadow-md font-jaa italic transition-all duration-500 ${isOnline ? 'jaa-gradient' : 'bg-gray-400'}`}>J</div>
+          <div>
+            <h2 className="text-sm font-black text-gray-800 uppercase tracking-tighter">{profile?.name || 'Motoboy'}</h2>
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`}></div>
+              <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{isOnline ? 'Disponível' : 'Indisponível'}</span>
             </div>
-            <p className="text-[10px] font-bold text-gray-400 text-right pr-1">
-              Mínimo: R$ {settings.minimumWithdrawalAmount.toFixed(2)}
-            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-gray-50 px-3 py-1.5 rounded-2xl border border-gray-100 gap-3">
+            <span className={`text-[8px] font-black uppercase tracking-widest ${isOnline ? 'text-emerald-500' : 'text-gray-400'}`}>
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+            <button 
+              onClick={handleToggleOnlineStatus}
+              className={`w-10 h-5 rounded-full relative transition-all duration-300 flex items-center px-0.5 ${isOnline ? 'bg-emerald-500' : 'bg-gray-300'}`}
+            >
+              <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300 transform ${isOnline ? 'translate-x-5' : 'translate-x-0'}`}></div>
+            </button>
           </div>
 
           <button 
-            onClick={handleWithdraw} 
-            disabled={hasPendingWithdrawal || !withdrawalAmount || parseFloat(withdrawalAmount) < settings.minimumWithdrawalAmount || parseFloat(withdrawalAmount) > balance} 
-            className="w-full bg-emerald-500 text-white font-black text-sm uppercase tracking-widest px-6 py-4 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
+            onClick={onRefresh}
+            disabled={isSyncing}
+            className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base disabled:opacity-50 shadow-sm"
+            title="Atualizar corridas"
           >
-            {hasPendingWithdrawal ? 'SAQUE PENDENTE' : 'SOLICITAR SAQUE'}
+            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
           </button>
+          <button onClick={() => setIsEditingProfile(true)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">⚙️</button>
+          <button onClick={onLogout} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">🚪</button>
+        </div>
+      </header>
+      
+      <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6">
+        {!isOnline && !isRouteActive && !isReturning && (
+          <div className="bg-gray-800 p-4 rounded-3xl text-center space-y-2 animate-in slide-in-from-top-4">
+            <p className="text-white font-black text-xs uppercase tracking-widest">Você está em modo de descanso</p>
+            <p className="text-gray-400 text-[9px] font-bold uppercase tracking-wider">Ligue o interruptor acima para começar a receber corridas</p>
+          </div>
+        )}
+
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
+            <h3 className="text-3xl font-black text-gray-800">R$ {(balance || 0).toFixed(2)}</h3>
+          </div>
+          <button onClick={() => setIsEditingProfile(true)} className="w-full bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">SOLICITAR SAQUE / CONFIGS</button>
         </div>
 
-        {activeOrder ? (
+        {isRouteActive ? (
             <div className="bg-white rounded-[2.5rem] shadow-xl border-4 border-white overflow-hidden animate-in fade-in duration-300">
-                <div className="h-64"><MapView markers={mapMarkers} userLocation={profile.currentLocation} /></div>
-                <div className="p-6 space-y-4">
-                    <div className="flex justify-between items-start"><h3 className="text-lg font-bold">Entrega #{activeOrder.id}</h3><span className="text-2xl font-black text-[#F84F39]">R$ {activeOrder.driverEarning.toFixed(2)}</span></div>
-                    <div className="bg-gray-50 p-4 rounded-xl space-y-3">
-                        <div className="flex items-center gap-3"><div className="text-lg">🏪</div><p className="text-xs font-bold text-gray-600 truncate">{activeOrder.pickup.address}</p></div>
-                        <div className="flex items-center gap-3"><div className="text-lg">📍</div><p className="text-xs font-bold text-gray-600 truncate">{activeOrder.dropoff.address}</p></div>
+                <div className="h-64"><MapView markers={mapMarkers} userLocation={profile?.currentLocation} /></div>
+                <div className="p-6 space-y-5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-lg font-black italic font-jaa uppercase tracking-tight">
+                          {isMultiRoute ? 'Manifesto de Rota Agrupada' : `Entrega #${activeOrders[0].id}`}
+                        </h3>
+                        {isMultiRoute && <span className="bg-orange-50 text-[#F84F39] text-[8px] font-black px-2 py-0.5 rounded-full uppercase">{activeOrders.length} Paradas</span>}
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-black text-[#F84F39]">R$ {totalRouteEarning.toFixed(2)}</span>
+                        <p className="text-[7px] text-gray-400 font-bold uppercase">Ganhos da Rota</p>
+                      </div>
                     </div>
-                    {activeOrder.status === OrderStatus.IN_TRANSIT && <input type="text" placeholder="Código de Entrega" value={deliveryCodeInput} onChange={e => setDeliveryCodeInput(e.target.value)} className="w-full text-center tracking-[0.5em] font-black text-xl px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none focus:border-[#F84F39]" />}
+
+                    <div className="space-y-3">
+                        <div className="bg-blue-50 p-4 rounded-2xl flex items-center gap-4">
+                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-xl shadow-sm">🏪</div>
+                          <div className="flex-1 min-w-0">
+                              <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Local de Coleta</p>
+                              <p className="text-xs font-bold text-gray-700 truncate">{activeOrders[0].pickup.address}</p>
+                          </div>
+                        </div>
+
+                        <div className="relative pl-6 space-y-4 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:border-l-2 before:border-dashed before:border-gray-200">
+                          {activeOrders.map((order, idx) => (
+                            <div key={order.id} className="bg-gray-50 p-4 rounded-2xl relative border border-white shadow-sm">
+                                <div className="absolute -left-[1.65rem] top-1/2 -translate-y-1/2 w-6 h-6 bg-white border-2 border-[#F84F39] rounded-full flex items-center justify-center text-[10px] font-black text-[#F84F39] z-10 shadow-sm">
+                                  {idx + 1}
+                                </div>
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <p className="text-[8px] font-black text-gray-400 uppercase">Parada #{idx + 1} (ID {order.id})</p>
+                                    <p className="text-xs font-bold text-gray-700">{order.dropoff.address}</p>
+                                  </div>
+                                  <span className="text-[10px] font-black text-[#F84F39]">R$ {(order.driverEarning + (order.hasReturnFee ? (order.returnFeePrice || 0) : 0)).toFixed(2)}</span>
+                                </div>
+
+                                {order.collectionAmount && order.collectionAmount > 0 && (
+                                  <div className="mt-2 bg-emerald-100 p-2.5 rounded-xl flex items-center gap-2 border border-emerald-200">
+                                      <span className="text-lg">💰</span>
+                                      <div className="flex-1">
+                                        <p className="text-[9px] font-black text-emerald-800 uppercase tracking-widest">Cobrar do Cliente Final:</p>
+                                        <p className="text-xs font-black text-emerald-700">R$ {order.collectionAmount.toFixed(2)} ({order.paymentMethodAtDelivery === 'CASH' ? 'DINHEIRO' : 'LEVAR MAQUININHA'})</p>
+                                      </div>
+                                  </div>
+                                )}
+                                
+                                {order.customerPhone && (
+                                  <div className="mt-2 bg-blue-50 p-2.5 rounded-xl flex items-center gap-2 border border-blue-100">
+                                      <span className="text-lg">📞</span>
+                                      <div className="flex-1">
+                                        <p className="text-[9px] font-black text-blue-800 uppercase tracking-widest">Contato Cliente:</p>
+                                        <p className="text-xs font-black text-blue-700">{order.customerPhone}</p>
+                                      </div>
+                                  </div>
+                                )}
+
+                                {commonStatus === OrderStatus.IN_TRANSIT && (
+                                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+                                      {order.requiresDeliveryCode && (
+                                        <div className="relative">
+                                          <input type="text" placeholder="Código de Entrega" value={deliveryCodes[order.id] || ''} onChange={e => setDeliveryCodes(prev => ({...prev, [order.id]: e.target.value}))} className="w-full text-center tracking-[0.3em] font-black text-sm px-4 py-2.5 bg-white border-2 border-gray-100 rounded-xl outline-none focus:border-[#F84F39]" />
+                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs">🔑</span>
+                                        </div>
+                                      )}
+                                      <button onClick={() => handleFinishDelivery(order)} className="w-full bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-100 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Finalizar Parada {idx + 1} ✓</button>
+                                  </div>
+                                )}
+                            </div>
+                          ))}
+                        </div>
+                    </div>
+                    
+                    {commonStatus !== OrderStatus.IN_TRANSIT && (
+                        <button onClick={handleGlobalStatusUpdate} className="w-full jaa-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-red-100 active:scale-95 transition-all uppercase tracking-widest text-xs">{getStatusActionText(commonStatus)}</button>
+                    )}
+
                     <div className="flex gap-2">
-                        <a href={`https://www.google.com/maps/dir/?api=1&origin=${profile.currentLocation?.lat},${profile.currentLocation?.lng}&destination=${activeOrder.status === OrderStatus.ACCEPTED ? activeOrder.pickup.lat : activeOrder.dropoff.lat},${activeOrder.status === OrderStatus.ACCEPTED ? activeOrder.pickup.lng : activeOrder.dropoff.lng}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-gray-800 text-white py-4 rounded-xl text-center font-bold text-sm">Maps</a>
-                        <a href={`https://waze.com/ul?ll=${activeOrder.status === OrderStatus.ACCEPTED ? activeOrder.pickup.lat : activeOrder.dropoff.lat},${activeOrder.status === OrderStatus.ACCEPTED ? activeOrder.pickup.lng : activeOrder.dropoff.lng}&navigate=yes`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-blue-500 text-white py-4 rounded-xl text-center font-bold text-sm">Waze</a>
+                        <a href={`https://www.google.com/maps/dir/?api=1&origin=${profile?.currentLocation?.lat},${profile?.currentLocation?.lng}&destination=${activeOrders[0].pickup.lat},${activeOrders[0].pickup.lng}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-gray-800 text-white py-4 rounded-xl text-center font-bold text-xs uppercase tracking-widest">Maps Coleta</a>
+                        <a href={`https://www.waze.com/ul?ll=${activeOrders[activeOrders.length - 1].dropoff.lat},${activeOrders[activeOrders.length - 1].dropoff.lng}&navigate=yes`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-[#33CCFF] text-white py-4 rounded-xl text-center font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                          <img src="https://img.icons8.com/color/48/waze.png" className="h-5" alt="Waze" />
+                          <span>Waze</span>
+                        </a>
                     </div>
-                    <button onClick={handleStatusUpdate} className="w-full jaa-gradient text-white font-bold py-5 rounded-2xl shadow-xl shadow-red-100">{getStatusActionText(activeOrder.status)}</button>
+                </div>
+            </div>
+        ) : isReturning && returningOrders[0] ? (
+            <div className="bg-white rounded-[2.5rem] shadow-xl border-4 border-white overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+                <div className="h-64"><MapView markers={mapMarkers} userLocation={profile?.currentLocation} /></div>
+                <div className="p-6 space-y-6">
+                    <div className="text-center">
+                        <div className="inline-block bg-orange-100 text-[#F84F39] text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest mb-3">📦 Retorno Necessário</div>
+                        <h3 className="text-xl font-black text-gray-800 font-jaa italic">
+                          Volte para {returningOrders[0]?.pickup?.address?.split(',')[0] || 'o estabelecimento'}
+                        </h3>
+                        <p className="text-gray-400 text-xs mt-2">Você possui pendência de retorno para esta loja. Devolva o dinheiro/máquina para que a loja libere seu pagamento total.</p>
+                    </div>
+
+                    <div className="bg-gray-50 p-5 rounded-3xl border border-gray-100">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Destino do Retorno</p>
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">🏪</span>
+                            <p className="text-sm font-bold text-gray-700">{returningOrders[0]?.pickup?.address || 'Endereço da Loja'}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <a 
+                            href={`https://www.google.com/maps/dir/?api=1&origin=${profile?.currentLocation?.lat},${profile?.currentLocation?.lng}&destination=${returningOrders[0].pickup.lat},${returningOrders[0].pickup.lng}`} 
+                            target="_blank" rel="noopener noreferrer" 
+                            className="bg-gray-800 text-white py-5 rounded-2xl text-center font-black text-[10px] uppercase tracking-widest shadow-lg flex flex-col items-center gap-1"
+                        >
+                            <span>Google Maps</span>
+                            <span className="text-[8px] opacity-60">Voltar à Loja</span>
+                        </a>
+                        <a 
+                            href={`https://www.waze.com/ul?ll=${returningOrders[0].pickup.lat},${returningOrders[0].pickup.lng}&navigate=yes`} 
+                            target="_blank" rel="noopener noreferrer" 
+                            className="bg-[#33CCFF] text-white py-5 rounded-2xl text-center font-black text-[10px] uppercase tracking-widest shadow-lg flex flex-col items-center gap-1"
+                        >
+                            <div className="flex items-center gap-1">
+                                <img src="https://img.icons8.com/color/48/waze.png" className="h-4" alt="Waze" />
+                                <span>Waze</span>
+                            </div>
+                            <span className="text-[8px] opacity-60">Voltar à Loja</span>
+                        </a>
+                    </div>
+
+                    <div className="space-y-3">
+                        {returningOrders[0].driverReportedReturn ? (
+                          <div className="bg-emerald-100 p-5 rounded-2xl text-center border-2 border-emerald-500 animate-pulse">
+                              <p className="text-emerald-700 text-xs font-black uppercase tracking-widest">Sinal enviado! ✓</p>
+                              <p className="text-emerald-600 text-[10px] font-bold">Aguardando confirmação da loja...</p>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => onReportReturn(returningOrders[0].id)}
+                            className="w-full bg-[#F84F39] text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 border-4 border-white"
+                          >
+                            🚩 JÁ ESTOU NA LOJA
+                          </button>
+                        )}
+                        <div className="bg-emerald-50 p-4 rounded-2xl text-center border border-emerald-100">
+                            <p className="text-emerald-700 text-[10px] font-black">
+                              Valor pendente: R$ {((returningOrders[0]?.driverEarning || 0) + (returningOrders[0]?.returnFeePrice || 0)).toFixed(2)}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         ) : (
           <div className="space-y-6">
-            <div className="bg-white rounded-[2.5rem] shadow-xl border-4 border-white overflow-hidden h-64">
-                <MapView markers={mapMarkers} userLocation={profile.currentLocation} />
-            </div>
+            <div className="bg-white rounded-[2.5rem] shadow-xl border-4 border-white overflow-hidden h-64"><MapView markers={mapMarkers} userLocation={profile?.currentLocation} /></div>
             <div className="bg-white p-4 rounded-[2.5rem] shadow-sm border border-gray-100">
               <div className="flex border-b border-gray-100 mb-2">
                 <button onClick={() => setActiveTab('orders')} className={`flex-1 py-3 font-bold text-sm text-center transition-colors ${activeTab === 'orders' ? 'text-[#F84F39] border-b-2 border-[#F84F39]' : 'text-gray-400'}`}>Corridas ({cityOrders.length})</button>
+                <button onClick={() => setActiveTab('scheduled')} className={`flex-1 py-3 font-bold text-sm text-center transition-colors ${activeTab === 'scheduled' ? 'text-[#F84F39] border-b-2 border-[#F84F39]' : 'text-gray-400'}`}>Agendados ({scheduledOrders.length})</button>
                 <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 font-bold text-sm text-center transition-colors ${activeTab === 'history' ? 'text-[#F84F39] border-b-2 border-[#F84F39]' : 'text-gray-400'}`}>Histórico</button>
               </div>
               {activeTab === 'orders' ? (
-                  <div className="space-y-3 p-2 max-h-[40vh] overflow-y-auto">
-                      {!isOnline ? <p className="text-center text-gray-400 py-10 font-bold text-sm">Fique online para ver corridas.</p> : cityOrders.length === 0 ? <p className="text-center text-gray-400 py-10 font-bold text-sm">Nenhuma corrida na sua cidade.</p> : cityOrders.map(order => (
-                          <div key={order.id} className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center">
-                              <div><p className="text-xs font-bold">{order.pickup.address} ➔ {order.dropoff.address}</p><p className="text-xs text-gray-500">~{order.distance.toFixed(1)} km</p></div>
-                              <button onClick={() => onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id)} className="bg-green-500 text-white font-bold px-4 py-2 rounded-lg">R${order.driverEarning.toFixed(2)}</button>
-                          </div>
-                      ))}
+                  <div className="space-y-4 p-2 max-h-[60vh] overflow-y-auto">
+                      {!isOnline ? (
+                        <div className="py-20 text-center space-y-4 opacity-50">
+                          <div className="text-5xl grayscale">💤</div>
+                          <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Você está offline no momento.</p>
+                          <p className="text-gray-300 text-[8px] font-bold uppercase">Ligue o interruptor acima para ver chamadas</p>
+                        </div>
+                      ) : cityOrders.length === 0 ? (
+                        <div className="py-20 text-center space-y-3"><div className="text-4xl animate-pulse">🔍</div><p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Buscando novas corridas em {profile?.city || 'sua região'}...</p></div>
+                      ) : (
+                        cityOrders.map(order => {
+                          const totalGain = (order.driverEarning || 0) + (order.hasReturnFee ? (order.returnFeePrice || 0) : 0);
+                          return (
+                            <div key={order.id} className="bg-white border-2 border-gray-50 rounded-[2rem] p-6 shadow-lg hover:border-[#F84F39]/20 transition-all group animate-in slide-in-from-bottom-2">
+                                <div className="flex justify-between items-start mb-6">
+                                  <div className="space-y-1">
+                                    <span className="bg-gray-100 text-gray-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase">ID #{order.id}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-2xl font-black text-[#F84F39]">R$ {totalGain.toFixed(2)}</span>
+                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">({order.distance.toFixed(1)} km)</span>
+                                    </div>
+                                    {order.hasReturnFee && (
+                                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                                            <span className="text-[9px] font-black text-emerald-600 uppercase bg-emerald-50 px-2 py-1 rounded-lg">
+                                                🔄 (VALOR TOTAL INCLUSO TAXA DE RETORNO)
+                                            </span>
+                                        </div>
+                                    )}
+                                  </div>
+                                  <div className="jaa-gradient text-white text-[10px] font-black px-4 py-2 rounded-xl shadow-lg animate-pulse">NOVA</div>
+                                </div>
+                                <div className="relative space-y-6 before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-0.5 before:bg-dashed before:border-l-2 before:border-gray-200 before:z-0">
+                                  <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-white border-4 border-[#0085FF] rounded-full flex-shrink-0 mt-1 shadow-sm"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Coleta</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.pickup.address}</p></div></div>
+                                  <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-[#F84F39] border-4 border-white rounded-full flex-shrink-0 mt-1 shadow-lg"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Entrega</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.dropoff.address}</p></div></div>
+                                </div>
+                                <button onClick={() => onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id)} className="w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2">ACEITAR ROTA AGORA 🛵</button>
+                            </div>
+                          );
+                        })
+                      )}
                   </div>
+              ) : activeTab === 'scheduled' ? (
+                <div className="space-y-4 p-2 max-h-[60vh] overflow-y-auto">
+                  {scheduledOrders.length === 0 ? (
+                      <div className="py-20 text-center space-y-3"><div className="text-4xl">🗓️</div><p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Nenhuma corrida agendada.</p></div>
+                  ) : (
+                      scheduledOrders.map(order => {
+                          const totalGain = (order.driverEarning || 0) + (order.hasReturnFee ? (order.returnFeePrice || 0) : 0);
+                          return (
+                            <div key={order.id} className="bg-white border-2 border-gray-50 rounded-[2rem] p-6 shadow-lg">
+                                <div className="flex justify-between items-start mb-4">
+                                  <div>
+                                    <span className="bg-purple-100 text-purple-700 text-[8px] font-black px-2 py-0.5 rounded-full uppercase">Agendado Para</span>
+                                    <p className="font-bold text-purple-700">{order.scheduledTime ? formatDateTime(order.scheduledTime) : 'N/A'}</p>
+                                  </div>
+                                  <span className="text-2xl font-black text-gray-800">R$ {totalGain.toFixed(2)}</span>
+                                </div>
+                                <div className="relative space-y-6 before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-0.5 before:bg-dashed before:border-l-2 before:border-gray-200 before:z-0">
+                                  <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-white border-4 border-[#0085FF] rounded-full flex-shrink-0 mt-1 shadow-sm"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Coleta</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.pickup.address}</p></div></div>
+                                  <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-[#F84F39] border-4 border-white rounded-full flex-shrink-0 mt-1 shadow-lg"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Entrega</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.dropoff.address}</p></div></div>
+                                </div>
+                                <div className="w-full mt-6 bg-gray-100 text-gray-400 text-center font-black py-3 rounded-2xl text-xs uppercase tracking-widest">
+                                    Aguardando Liberação da Loja
+                                </div>
+                            </div>
+                          );
+                      })
+                  )}
+                </div>
               ) : (
                   <div className="space-y-3 p-2 max-h-[40vh] overflow-y-auto">
                       {driverHistory.length > 0 ? driverHistory.map(order => (
-                           <div key={order.id} className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center">
-                              <div><p className="text-xs font-bold">#{order.id}</p><p className="text-xs text-gray-500">{formatDateTime(order.timestamp)}</p></div>
-                              <span className="font-bold text-green-600">+ R${order.driverEarning.toFixed(2)}</span>
-                           </div>
+                          <div key={order.id} className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center"><div><p className="text-xs font-bold">#{order.id}</p><p className="text-xs text-gray-500">{formatDateTime(order.timestamp)}</p></div><span className="font-bold text-green-600">+ R${((order.driverEarning || 0) + (order.hasReturnFee ? (order.returnFeePrice || 0) : 0)).toFixed(2)}</span></div>
                       )) : <p className="text-center text-gray-400 py-10 font-bold text-sm">Nenhuma corrida finalizada.</p>}
                   </div>
               )}
@@ -285,22 +550,58 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       </main>
 
       {isEditingProfile && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50">
-            <div className="w-full max-w-sm bg-white rounded-[3rem] p-8 shadow-2xl border-4 border-white">
-                <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold">Configurações</h2><button onClick={() => setIsEditingProfile(false)} className="font-bold text-gray-300">✕</button></div>
-                <div className="space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold text-gray-500">Sua cidade de atuação</label>
-                        <input type="text" value={tempProfile.city} onChange={e => setTempProfile(p => ({ ...p, city: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg"/>
+        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+            <div className="w-full max-w-lg bg-white rounded-[3rem] p-8 shadow-2xl border-4 border-white max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black font-jaa italic">Configurações e Saque</h2><button onClick={() => setIsEditingProfile(false)} className="font-bold text-gray-300">✕</button></div>
+                <div className="space-y-8">
+                    <div className="bg-gray-50 p-6 rounded-3xl border-2 border-gray-100">
+                        <div className="flex justify-between items-center mb-2">
+                           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Solicitar Saque (Saldo: R$ {(balance || 0).toFixed(2)})</label>
+                           <button 
+                             onClick={() => setWithdrawalAmount(balance > 0 ? balance.toFixed(2) : '0.00')}
+                             className="text-[9px] font-black jaa-gradient text-white px-3 py-1 rounded-lg shadow-md active:scale-95 transition-all uppercase"
+                           >
+                             Sacar Tudo
+                           </button>
+                        </div>
+                        {hasPendingWithdrawal ? (
+                            <div className="bg-yellow-100 border border-yellow-200 text-yellow-800 text-xs font-bold text-center p-4 rounded-xl">
+                                Você já possui uma solicitação de saque em andamento.
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                       <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">R$</span>
+                                       <input 
+                                         type="text" 
+                                         inputMode="decimal"
+                                         value={withdrawalAmount} 
+                                         onChange={e => {
+                                           const val = e.target.value.replace(',', '.');
+                                           if (/^\d*\.?\d{0,2}$/.test(val)) {
+                                             setWithdrawalAmount(val);
+                                           }
+                                         }} 
+                                         placeholder="0.00" 
+                                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 font-bold outline-none focus:border-[#F84F39]"
+                                       />
+                                    </div>
+                                    <button onClick={handleWithdraw} className="jaa-gradient text-white font-black px-6 py-3 rounded-xl text-[10px] uppercase shadow-lg">Sacar</button>
+                                </div>
+                                <div className="flex justify-between items-center mt-2">
+                                    <p className="text-[8px] text-gray-400 font-bold uppercase">Mínimo: R$ {settings?.minimumWithdrawalAmount?.toFixed(2) || '80.00'}</p>
+                                    <p className="text-[8px] text-emerald-600 font-bold uppercase">Receba em até 2 dias úteis</p>
+                                </div>
+                            </>
+                        )}
                     </div>
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold text-gray-500">Sua Chave PIX (para saques)</label>
-                        <input type="text" placeholder="CPF, e-mail, celular, etc." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg"/>
+                    <div className="space-y-4">
+                        <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cidade Atuação</label><input type="text" value={tempProfile.city} onChange={e => setTempProfile(p => ({ ...p, city: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
+                        <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Saque</label><input type="text" placeholder="CPF, e-mail, celular..." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
+                        <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-[10px] font-black uppercase jaa-gradient text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">{isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '🎯 Sincronizar pelo GPS'}</button>
+                        <button onClick={saveProfile} className="w-full bg-gray-800 text-white font-black py-5 rounded-2xl text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">SALVAR ALTERAÇÕES</button>
                     </div>
-                    <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-sm jaa-gradient text-white py-3 rounded-lg flex items-center justify-center gap-2">
-                        {isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '📍 Usar GPS para definir cidade'}
-                    </button>
-                    <button onClick={saveProfile} className="w-full bg-gray-800 text-white font-bold py-4 rounded-lg">Salvar</button>
                 </div>
             </div>
         </div>

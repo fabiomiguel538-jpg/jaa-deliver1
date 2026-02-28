@@ -1,10 +1,11 @@
 
+import { Location, StoreProfile, PlatformSettings } from '../types';
 import React, { useState, useEffect, useRef } from 'react';
-import { Location, StoreProfile } from '../types';
 
 interface StoreRegistrationProps {
   onSignup: (profile: Omit<StoreProfile, 'id' | 'status' | 'registrationDate' | 'balance' | 'deliveryRadius'>) => void;
   onBack: () => void;
+  settings: PlatformSettings;
 }
 
 const isValidNumber = (val: any): boolean => {
@@ -19,16 +20,19 @@ const sanitizeCoord = (val: any, fallback: number): number => {
   return isNaN(num) || !isFinite(num) ? fallback : num;
 };
 
-const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack }) => {
+const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack, settings }) => {
   const [form, setForm] = useState({
     name: '',
     email: '',
     taxId: '',
+    phone: '',
+    whatsapp: '',
     password: '',
     cep: '',
     city: '',
     address: '',
-    number: ''
+    number: '',
+    accessRequestType: 'DAILY' as 'DAILY' | 'MONTHLY'
   });
 
   const [coords, setCoords] = useState<Location>({ lat: -23.5505, lng: -46.6333 });
@@ -40,7 +44,6 @@ const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack 
   const mapRef = useRef<any | null>(null);
   const markerRef = useRef<any | null>(null);
 
-  // Tentar obter localização automática ao carregar a página
   useEffect(() => {
     handleUseGps();
   }, []);
@@ -177,7 +180,7 @@ const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const required = ['name', 'email', 'taxId', 'password', 'cep', 'city', 'address', 'number'];
+    const required = ['name', 'email', 'taxId', 'phone', 'whatsapp', 'password', 'cep', 'city', 'address', 'number'];
     if (required.every(f => form[f as keyof typeof form].trim())) {
       setIsSubmitting(true);
       setTimeout(() => {
@@ -192,7 +195,7 @@ const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack 
         });
       }, 1000);
     } else {
-      alert("Preencha todos os campos.");
+      alert("Por favor, preencha todos os campos obrigatórios.");
     }
   };
 
@@ -220,41 +223,87 @@ const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack 
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="text" placeholder="Nome Fantasia" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <input type="text" placeholder="Nome Fantasia" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <input type="text" placeholder="CNPJ" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.taxId} onChange={e => setForm({...form, taxId: e.target.value})} />
-              <input type="email" placeholder="E-mail" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+              <input type="text" placeholder="CNPJ" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.taxId} onChange={e => setForm({...form, taxId: e.target.value})} />
+              <input type="email" placeholder="E-mail" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <input type="text" placeholder="Telefone" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+              <input type="text" placeholder="WhatsApp" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: e.target.value})} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="relative">
-                <input type="text" placeholder="CEP" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" onBlur={handleCepBlur} value={form.cep} onChange={e => setForm({...form, cep: e.target.value})} />
+                <input type="text" placeholder="CEP" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" onBlur={handleCepBlur} value={form.cep} onChange={e => setForm({...form, cep: e.target.value})} />
                 {isSearchingCep && <div className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#F84F39] border-t-transparent rounded-full animate-spin"></div>}
               </div>
-              <input type="text" placeholder="Nº" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.number} onChange={e => setForm({...form, number: e.target.value})} />
+              <input type="text" placeholder="Nº" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.number} onChange={e => setForm({...form, number: e.target.value})} />
             </div>
 
-            <input type="text" placeholder="Cidade" readOnly className="w-full px-6 py-4.5 bg-white border border-gray-100 rounded-2xl outline-none font-black text-[#F84F39] text-sm" value={form.city} />
-            <input type="text" placeholder="Endereço" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
-            <input type="password" placeholder="Senha" className="w-full px-6 py-4.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+            <input type="text" placeholder="Cidade" readOnly className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl outline-none font-black text-[#F84F39] text-sm" value={form.city} />
+            <input type="text" placeholder="Endereço Completo" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+            <input type="password" placeholder="Crie sua Senha" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-[#F84F39] font-bold text-sm" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
 
-            <div className="pt-6">
-              <button disabled={isSubmitting} className={`w-full ${isSubmitting ? 'bg-gray-400' : 'jaa-gradient'} text-white font-black py-5 rounded-2xl shadow-xl shadow-red-100 text-xs uppercase tracking-widest active:scale-95 transition-all`}>
-                {isSubmitting ? 'PROCESSANDO...' : 'CRIAR CONTA'}
+            <div className="py-4">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">Selecione seu Plano de Operação</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setForm({...form, accessRequestType: 'DAILY'})}
+                  className={`flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${form.accessRequestType === 'DAILY' ? 'border-[#F84F39] bg-orange-50 shadow-inner' : 'border-gray-100 bg-white'}`}
+                >
+                  <span className="text-[9px] font-black text-gray-400 uppercase mb-1">PLANO DIÁRIO</span>
+                  <span className={`text-xl font-black ${form.accessRequestType === 'DAILY' ? 'text-[#F84F39]' : 'text-gray-800'}`}>R$ {(settings?.dailyPrice || 0).toFixed(2)}</span>
+                  <span className="text-[7px] font-bold text-gray-400 uppercase mt-1">Cobrado por dia usado</span>
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setForm({...form, accessRequestType: 'MONTHLY'})}
+                  className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all ${form.accessRequestType === 'MONTHLY' ? 'border-[#F84F39] bg-orange-50 shadow-inner' : 'border-gray-100 bg-white'}`}
+                >
+                  <div className="absolute -top-2 bg-emerald-500 text-white text-[6px] font-black px-2 py-0.5 rounded-full tracking-widest uppercase shadow-sm">MELHOR VALOR</div>
+                  <span className="text-[9px] font-black text-gray-400 uppercase mb-1">PLANO MENSAL</span>
+                  <span className={`text-xl font-black ${form.accessRequestType === 'MONTHLY' ? 'text-[#F84F39]' : 'text-gray-800'}`}>R$ {(settings?.monthlyPrice || 0).toFixed(2)}</span>
+                  <span className="text-[7px] font-bold text-gray-400 uppercase mt-1">Acesso ilimitado 30 dias</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button 
+                type="submit"
+                disabled={isSubmitting} 
+                className={`w-full ${isSubmitting ? 'bg-gray-400' : 'jaa-gradient'} text-white font-black py-6 rounded-2xl shadow-xl shadow-red-100 text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-3`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ENVIANDO SOLICITAÇÃO...
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xl">📩</span> ENVIAR SOLICITAÇÃO
+                  </>
+                )}
               </button>
-              <button type="button" onClick={onBack} className="w-full py-4 text-gray-300 font-black text-[10px] uppercase tracking-widest">Voltar</button>
+              <button type="button" onClick={onBack} className="w-full py-4 text-gray-300 font-black text-[10px] uppercase tracking-widest hover:text-gray-500 transition-colors">Voltar para Início</button>
             </div>
           </form>
         </div>
 
-        <div className="w-full md:w-1/2 bg-gray-50 flex flex-col relative order-first md:order-last h-64 md:h-auto">
+        <div className="w-full md:w-1/2 bg-gray-50 flex flex-col relative order-first md:order-last h-64 md:h-auto border-b md:border-b-0 md:border-l border-gray-100">
            <div className="absolute top-6 left-6 right-6 z-10">
-              <h3 className="text-[10px] font-black text-gray-800 uppercase bg-white/95 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg inline-block border border-gray-100">
-                {isSearchingGps ? '📍 Obtendo GPS...' : '📍 Localização Automática'}
-              </h3>
+              <div className="bg-white/95 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg inline-block border border-gray-100">
+                <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {isSearchingGps ? 'Obtendo GPS...' : 'Localização Automática Ativa'}
+                </p>
+              </div>
            </div>
-           <div ref={mapContainerRef} className="flex-1 w-full h-full"></div>
+           <div ref={mapContainerRef} className="flex-1 w-full h-full grayscale-[20%] contrast-[1.1]"></div>
         </div>
       </div>
     </div>

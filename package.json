@@ -1,5 +1,5 @@
 {
-  "name": "motorush-delivery-hub",
+  "name": "jaa-delivery-hub",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,11 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "recharts": "^3.6.0",
-    "react-dom": "^19.2.3",
     "@google/genai": "^1.34.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "@tailwindcss/vite": "^4.2.1",
     "react": "^19.2.3",
-    "@neondatabase/serverless": "^0.10.4"
+    "react-dom": "^19.2.3",
+    "recharts": "^3.6.0",
+    "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,3 +1,4 @@
+
 export enum UserRole {
   STORE = 'STORE',
   DRIVER = 'DRIVER',
@@ -11,6 +12,7 @@ export enum OrderStatus {
   IN_TRANSIT = 'IN_TRANSIT',
   DELIVERED = 'DELIVERED',
   CANCELED = 'CANCELED',
+  SCHEDULED = 'SCHEDULED',
   PENDING_PAYMENT_CONFIRMATION = 'PENDING_PAYMENT_CONFIRMATION'
 }
 
@@ -49,17 +51,29 @@ export interface Location {
 export interface Order {
   id: string;
   storeId: string;
-  storeCity: string; // Adicionado para facilitar filtragem
+  storeCity: string; 
   driverId?: string;
+  preAssignedDriverId?: string; 
+  linkedToOrderId?: string;
   status: OrderStatus;
   pickup: Location;
   dropoff: Location;
-  price: number; // Valor pago pela loja
-  driverEarning: number; // Valor recebido pelo motoboy
+  price: number; 
+  driverEarning: number; 
   distance: number;
   timestamp: number;
+  scheduledTime?: number;
   deliveryCode: string;
+  requiresDeliveryCode?: boolean;
   paymentReceiptUrl?: string;
+  hasReturnFee?: boolean;
+  returnFeePrice?: number;
+  returnFeePaid?: boolean;
+  driverReportedReturn?: boolean; // Novo campo
+  collectionAmount?: number;
+  paymentMethodAtDelivery?: 'CASH' | 'CARD_MACHINE' | 'NONE';
+  dropoffComplement?: string;
+  customerPhone?: string;
 }
 
 export interface DriverProfile {
@@ -67,21 +81,25 @@ export interface DriverProfile {
   name: string;
   email: string;
   taxId: string;
+  phone?: string;
+  whatsapp?: string;
   password?: string;
   vehicle: string;
   plate: string;
   city: string;
   cep: string;
   licenseImageUrl?: string;
-  selfieWithLicenseUrl?: string; // Selfie segurando CNH
-  vehiclePhotoUrl1?: string;    // Foto da moto 1
-  vehiclePhotoUrl2?: string;    // Foto da moto 2 (placa)
+  selfieWithLicenseUrl?: string; 
+  vehiclePhotoUrl1?: string;    
+  vehiclePhotoUrl2?: string;    
   status: DriverRegistrationStatus;
   registrationDate: string;
   balance: number;
   isOnline?: boolean;
   currentLocation?: Location;
   pixKey?: string;
+  isBlocked?: boolean;
+  blockReason?: string;
 }
 
 export interface StoreProfile {
@@ -89,6 +107,8 @@ export interface StoreProfile {
   name: string;
   email: string;
   taxId: string;
+  phone?: string;
+  whatsapp?: string;
   password?: string;
   cep: string;
   city: string;
@@ -98,8 +118,18 @@ export interface StoreProfile {
   registrationDate: string;
   balance: number;
   deliveryRadius: number;
-  accessValidity?: number; // Timestamp de validade do acesso
-  accessRequestType?: 'DAILY' | 'MONTHLY'; // Pedido pendente
+  accessValidity?: number; 
+  accessRequestType?: 'DAILY' | 'MONTHLY'; 
+  paymentProofUrl?: string; 
+  isBlocked?: boolean;
+  blockReason?: string;
+  // Precificação Individual
+  minPrice?: number;
+  pricePerKm?: number;
+  returnFeeAmount?: number;
+  driverEarningModel?: 'PERCENTAGE' | 'FIXED';
+  driverEarningPercentage?: number;
+  driverEarningFixed?: number;
 }
 
 export interface RechargeRequest {
@@ -109,6 +139,7 @@ export interface RechargeRequest {
   amount: number;
   status: RechargeRequestStatus;
   requestDate: number;
+  paymentReceiptUrl?: string;
 }
 
 export interface WithdrawalRequest {
@@ -125,10 +156,12 @@ export interface PlatformSettings {
   dailyPrice: number;
   monthlyPrice: number;
   pixKey: string;
+  supportWhatsapp?: string;
   minPrice: number;
   pricePerKm: number;
   minimumWithdrawalAmount: number;
   driverEarningModel: 'PERCENTAGE' | 'FIXED';
   driverEarningPercentage: number;
   driverEarningFixed: number;
+  returnFeeAmount: number; 
 }
