@@ -251,6 +251,31 @@ const App: React.FC = () => {
   };
   
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus, driverId?: string) => {
+    // Se a ação for "ACEITAR" (ACCEPTED), fazemos uma verificação atômica no banco
+    if (status === OrderStatus.ACCEPTED) {
+      setIsSyncing(true);
+      try {
+        // Busca a versão mais recente dos pedidos no banco de dados
+        const latestOrders = await dbService.getOrders();
+        const latestOrder = latestOrders.find(o => o.id === orderId);
+        
+        // Se o pedido não existir mais ou não estiver mais "SEARCHING" (Disponível)
+        if (!latestOrder || latestOrder.status !== OrderStatus.SEARCHING) {
+          alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
+          // Atualiza o estado local para remover a corrida da tela
+          setGlobalOrders(latestOrders);
+          setIsSyncing(false);
+          return; // Interrompe a execução, bloqueando a atualização
+        }
+      } catch (error) {
+        console.error("Erro ao validar status do pedido:", error);
+        alert("Erro de conexão ao tentar aceitar a corrida. Tente novamente.");
+        setIsSyncing(false);
+        return;
+      }
+      setIsSyncing(false);
+    }
+
     const order = globalOrders.find(o => o.id === orderId);
     if (!order) return;
     

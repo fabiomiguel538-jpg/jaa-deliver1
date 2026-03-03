@@ -96,6 +96,31 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     onToggleOnline(profile.id, nextStatus);
   };
   
+  // Ouvinte (Listener) para cancelamento de corridas ativas
+  useEffect(() => {
+    // Se não houver corrida ativa na tela, não faz nada
+    if (activeOrders.length === 0) return;
+
+    // Pega os IDs das corridas que estão ativas na tela do motoboy
+    const activeOrderIds = activeOrders.map(o => o.id);
+
+    // Procura na lista global de pedidos (allOrders) se alguma dessas corridas ativas mudou para CANCELADA
+    const canceledOrder = allOrders.find(
+      o => activeOrderIds.includes(o.id) && o.status === OrderStatus.CANCELED
+    );
+
+    if (canceledOrder) {
+      // Exibe o alerta nativo informando o cancelamento
+      alert('Atenção: Esta corrida foi cancelada pelo estabelecimento.');
+      
+      // O redirecionamento/limpeza da tela acontece automaticamente porque o componente pai (App.tsx)
+      // vai re-renderizar o DriverDashboard passando a nova lista de activeOrders (que agora estará vazia
+      // para esta corrida, pois o status mudou para CANCELED).
+      // Forçamos um refresh apenas para garantir a sincronia imediata.
+      onRefresh();
+    }
+  }, [allOrders, activeOrders, onRefresh]);
+
   // CORREÇÃO CRÍTICA: Notificações no Chrome Mobile podem causar Crash (TypeError)
   useEffect(() => {
     if (lastAvailableCount.current === undefined) {
