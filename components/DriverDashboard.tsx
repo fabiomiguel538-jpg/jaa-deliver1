@@ -122,6 +122,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           console.warn("Nativo de notificações não disponível neste navegador/dispositivo.");
         }
       }
+
+      // Exibir alerta nativo para aceitar ou recusar a corrida
+      setTimeout(() => {
+        const accept = window.confirm(`Nova corrida disponível!\nValor: R$ ${displayEarning.toFixed(2)}\nEstabelecimento: ${newestOrder?.pickup?.address?.split(',')[0] || 'PedeJá'}\n\nDeseja aceitar?`);
+        if (accept) {
+          onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
+        }
+      }, 100);
     }
     lastAvailableCount.current = cityOrders.length;
   }, [cityOrders, isOnline]);
