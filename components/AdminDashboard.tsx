@@ -152,17 +152,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alert('Configurações salvas com sucesso!');
   };
 
-  const handleDownloadImage = (base64Url: string, fileName: string) => {
-    if (!base64Url || !base64Url.startsWith('data:image')) {
-      alert('A imagem não está disponível ou é inválida para download.');
+  const handleDownloadImage = async (url: string, fileName: string) => {
+    if (!url) {
+      alert('A imagem não está disponível para download.');
       return;
     }
-    const link = document.createElement('a');
-    link.href = base64Url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    try {
+      if (url.startsWith('data:image')) {
+        // Se for base64, faz o download direto
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // Se for URL externa, usa fetch e Blob para forçar o download
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Erro ao baixar a imagem');
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Limpa a URL do Blob da memória
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    } catch (error) {
+      console.error('Erro no download:', error);
+      alert('Não foi possível fazer o download da imagem. Tente abrir em uma nova aba.');
+    }
   };
 
   const handleResetClick = async () => {
