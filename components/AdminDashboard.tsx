@@ -99,6 +99,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedRechargeId, setSelectedRechargeId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editPassword, setEditPassword] = useState('');
+  const [storeCreditAmount, setStoreCreditAmount] = useState<string>('');
   const [timeAgo, setTimeAgo] = useState('...');
   const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
@@ -197,6 +198,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onUpdateStore(selectedStore.id, { isBlocked: true, blockReason: reason });
       }
     }
+  };
+
+  const handleAddStoreCredit = (store: StoreProfile) => {
+    const amount = parseFloat(storeCreditAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Por favor, insira um valor numérico válido maior que zero.');
+      return;
+    }
+    const newBalance = (store.balance || 0) + amount;
+    onUpdateStore(store.id, { balance: newBalance });
+    setStoreCreditAmount('');
+    alert(`Crédito de R$ ${amount.toFixed(2)} adicionado com sucesso!`);
+  };
+
+  const handleRemoveStoreCredit = (store: StoreProfile) => {
+    const amount = parseFloat(storeCreditAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Por favor, insira um valor numérico válido maior que zero.');
+      return;
+    }
+    const newBalance = (store.balance || 0) - amount;
+    onUpdateStore(store.id, { balance: newBalance });
+    setStoreCreditAmount('');
+    alert(`Crédito de R$ ${amount.toFixed(2)} removido com sucesso!`);
   };
 
   const handleSettingsChange = (field: keyof PlatformSettings, value: any) => {
@@ -490,7 +515,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     </div>
 
     <p className="text-[8px] text-orange-400 font-bold uppercase text-center mt-2 italic">As alterações são salvas automaticamente após editar os valores.</p>
-</div>{selectedStore.isBlocked && (<div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-bold"><strong>Usuário Bloqueado.</strong> Motivo: {selectedStore.blockReason}</div>)}<div className="bg-gray-50 p-4 rounded-2xl"><p className="text-[8px] font-black text-gray-400 uppercase mb-2">Segurança: Senha</p><div className="flex gap-2"><input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} className="flex-1 bg-white border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm" /><button onClick={() => { onUpdateStore(selectedStore.id, { password: editPassword }); alert('Senha atualizada!'); }} className="bg-gray-800 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase">{Icons.password} Alterar</button></div></div>{selectedStore.paymentProofUrl && <div><h3 className="text-sm font-bold my-4">Comprovante de Acesso</h3><a href={selectedStore.paymentProofUrl} target="_blank" rel="noopener noreferrer"><img src={selectedStore.paymentProofUrl} className="w-full max-w-sm mx-auto rounded-xl border-2 border-white shadow-lg" alt="comprovante"/></a><button onClick={() => { onApproveAccess(selectedStore.id, selectedStore.accessRequestType || 'DAILY'); setSelectedStoreId(null); }} className="w-full mt-4 jaa-gradient text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest shadow-lg">{Icons.approve} Aprovar Acesso</button></div>}</div>
+</div>
+
+{/* Gerenciamento de Saldo */}
+<div className="bg-blue-50 p-6 rounded-[2rem] border border-blue-100 space-y-4">
+    <h3 className="text-xs font-black uppercase text-blue-600 tracking-widest mb-2 flex items-center gap-2">{Icons.wallet} Gerenciar Saldo</h3>
+    <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-blue-100">
+        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</span>
+        <span className="text-xl font-black text-gray-800">R$ {(selectedStore.balance || 0).toFixed(2)}</span>
+    </div>
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Valor da Operação (R$)</label>
+        <input type="number" step="0.01" value={storeCreditAmount} onChange={e => setStoreCreditAmount(e.target.value)} placeholder="Ex: 50.00" className="w-full p-4 bg-white border border-blue-200 rounded-2xl outline-none font-bold focus:border-blue-500" />
+    </div>
+    <div className="flex gap-2 pt-2">
+        <button onClick={() => handleAddStoreCredit(selectedStore)} className="flex-1 bg-emerald-500 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2">
+            Adicionar
+        </button>
+        <button onClick={() => handleRemoveStoreCredit(selectedStore)} className="flex-1 bg-red-500 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest shadow-lg shadow-red-100 active:scale-95 transition-all flex items-center justify-center gap-2">
+            Remover
+        </button>
+    </div>
+</div>
+
+{selectedStore.isBlocked && (<div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-bold"><strong>Usuário Bloqueado.</strong> Motivo: {selectedStore.blockReason}</div>)}<div className="bg-gray-50 p-4 rounded-2xl"><p className="text-[8px] font-black text-gray-400 uppercase mb-2">Segurança: Senha</p><div className="flex gap-2"><input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} className="flex-1 bg-white border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm" /><button onClick={() => { onUpdateStore(selectedStore.id, { password: editPassword }); alert('Senha atualizada!'); }} className="bg-gray-800 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase">{Icons.password} Alterar</button></div></div>{selectedStore.paymentProofUrl && <div><h3 className="text-sm font-bold my-4">Comprovante de Acesso</h3><a href={selectedStore.paymentProofUrl} target="_blank" rel="noopener noreferrer"><img src={selectedStore.paymentProofUrl} className="w-full max-w-sm mx-auto rounded-xl border-2 border-white shadow-lg" alt="comprovante"/></a><button onClick={() => { onApproveAccess(selectedStore.id, selectedStore.accessRequestType || 'DAILY'); setSelectedStoreId(null); }} className="w-full mt-4 jaa-gradient text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest shadow-lg">{Icons.approve} Aprovar Acesso</button></div>}</div>
         {selectedStore.status === StoreRegistrationStatus.PENDING ? (
           <div className="flex gap-4 mt-8">
             <button onClick={() => { onApproveStore(selectedStore.id); setSelectedStoreId(null); }} className="flex-1 jaa-gradient text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest shadow-lg">{Icons.approve} Aprovar Cadastro</button>
