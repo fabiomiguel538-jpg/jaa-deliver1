@@ -283,6 +283,31 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const totalRouteEarning = activeOrders.reduce((acc, o) => acc + (o.driverEarning || 0) + (o.hasReturnFee ? (o.returnFeePrice || 0) : 0), 0);
 
+  // Verificação de Status de Aprovação
+  if (profile?.status === DriverRegistrationStatus.PENDING) {
+    return (
+      <div className="flex flex-col min-h-[100dvh] bg-[#f7f7f7] items-center justify-center p-6 text-center">
+        <div className="bg-white p-8 rounded-[3rem] shadow-xl max-w-sm w-full space-y-6 border-4 border-white animate-in zoom-in-95">
+          <div className="w-24 h-24 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center mx-auto text-4xl shadow-inner">
+            ⏳
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-gray-800 mb-2 font-jaa italic">Cadastro em Análise</h2>
+            <p className="text-sm text-gray-500 font-medium leading-relaxed">
+              Seu cadastro está em análise. Aguarde a aprovação do administrador para começar a receber corridas.
+            </p>
+          </div>
+          <button 
+            onClick={onLogout} 
+            className="w-full bg-gray-100 text-gray-600 font-black py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-gray-200 transition-colors"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#f7f7f7]">
       <header className="sticky top-0 bg-white px-6 py-4 flex justify-between items-center border-b border-gray-100 z-40 shadow-sm">
