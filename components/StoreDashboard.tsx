@@ -633,7 +633,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
                              <span className="text-2xl font-black text-[#F84F39]">R$ {(order.price || 0).toFixed(2)}</span>
                              {order.hasReturnFee && <p className="text-[8px] font-black text-blue-500 uppercase">COM TAXA DE RETORNO</p>}
                              {order.collectionAmount && order.collectionAmount > 0 && (
-                                <p className="text-[9px] font-black text-emerald-600 uppercase mt-1">A cobrar: R$ {order.collectionAmount.toFixed(2)}</p>
+                                <p className="text-[9px] font-black text-emerald-600 uppercase mt-1">A cobrar: R$ {(order.collectionAmount || 0).toFixed(2)}</p>
                              )}
                           </div>
                         </div>
@@ -899,7 +899,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     <p className="text-[10px] text-gray-400 uppercase font-black mb-1">Valor do Frete {deliveryPaymentMethod !== 'NONE' && '(Com Retorno)'}</p>
                     <span className="text-[#F84F39] font-black text-4xl">R$ {(estimation?.total || 0).toFixed(2)}</span>
                     {deliveryPaymentMethod !== 'NONE' && (
-                       <p className="text-[10px] font-black text-emerald-600 uppercase mt-2">💰 O motoboy cobrará R$ {parseFloat(collectionAmount).toFixed(2)} do cliente</p>
+                       <p className="text-[10px] font-black text-emerald-600 uppercase mt-2">💰 O motoboy cobrará R$ {(parseFloat(collectionAmount) || 0).toFixed(2)} do cliente</p>
                     )}
                   </div>
 

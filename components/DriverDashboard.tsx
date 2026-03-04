@@ -408,7 +408,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                       <span className="text-lg">💰</span>
                                       <div className="flex-1">
                                         <p className="text-[9px] font-black text-emerald-800 uppercase tracking-widest">Cobrar do Cliente Final:</p>
-                                        <p className="text-xs font-black text-emerald-700">R$ {order.collectionAmount.toFixed(2)} ({order.paymentMethodAtDelivery === 'CASH' ? 'DINHEIRO' : 'LEVAR MAQUININHA'})</p>
+                                        <p className="text-xs font-black text-emerald-700">R$ {(order.collectionAmount || 0).toFixed(2)} ({order.paymentMethodAtDelivery === 'CASH' ? 'DINHEIRO' : 'LEVAR MAQUININHA'})</p>
                                       </div>
                                   </div>
                                 )}
@@ -545,7 +545,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                     <span className="bg-gray-100 text-gray-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase">ID #{order.id}</span>
                                     <div className="flex items-center gap-2">
                                       <span className="text-2xl font-black text-[#F84F39]">R$ {totalGain.toFixed(2)}</span>
-                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">({order.distance.toFixed(1)} km)</span>
+                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">({(order.distance || 0).toFixed(1)} km)</span>
                                     </div>
                                     {order.hasReturnFee && (
                                         <div className="flex flex-wrap items-center gap-1 mt-1">
