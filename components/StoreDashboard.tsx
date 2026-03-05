@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Order, OrderStatus, StoreProfile, Location, DriverProfile, PlatformSettings } from '../types';
+import { Order, OrderStatus, StoreProfile, Location, DriverProfile, PlatformSettings, StoreRegistrationStatus } from '../types';
 import { APP_LOGO, LOGO_SVG_FALLBACK } from '../constants';
 import MapView from './MapView';
 import Checkout from './Checkout';
@@ -537,6 +537,48 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
       default: return { text: status, color: "bg-gray-100 text-gray-800" };
     }
   };
+
+  if (profile.status !== StoreRegistrationStatus.APPROVED) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#f7f7f7] p-8 text-center">
+        <div className="w-24 h-24 jaa-gradient rounded-[2rem] flex items-center justify-center text-white text-4xl shadow-2xl mb-8 relative overflow-hidden">
+          <span className="relative z-10">🏪</span>
+          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+        </div>
+        
+        <div className="space-y-4 max-w-sm">
+          <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tighter leading-none">
+            Seu estabelecimento <br/> está em análise
+          </h1>
+          <p className="text-gray-500 text-sm font-medium leading-relaxed">
+            Aguarde a aprovação do administrador para acessar o painel e começar a gerenciar seus pedidos.
+          </p>
+        </div>
+
+        <div className="mt-12 flex flex-col gap-4 w-full max-w-xs">
+          <button 
+            onClick={onRefresh}
+            disabled={isSyncing}
+            className="w-full py-4 bg-white text-gray-800 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-sm border border-gray-100 hover:shadow-md active:scale-95 transition-all flex items-center justify-center gap-3"
+          >
+            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
+            {isSyncing ? 'Verificando...' : 'Verificar Aprovação'}
+          </button>
+          
+          <button 
+            onClick={onLogout}
+            className="w-full py-4 text-gray-400 font-bold uppercase tracking-widest text-[9px] hover:text-red-500 transition-colors"
+          >
+            Sair da Conta
+          </button>
+        </div>
+
+        <div className="mt-16 pt-8 border-t border-gray-200 w-full max-w-xs">
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Pede Já • Delivery</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#f7f7f7] font-sans">
