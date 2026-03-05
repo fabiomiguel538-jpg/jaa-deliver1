@@ -159,15 +159,8 @@ export const dbService = {
     try {
       const res = await executeSql(`SELECT data FROM drivers`);
       const cloud = res.map(r => r.data);
-      const merged = local.map(ld => {
-        const cd = cloud.find(c => c.id === ld.id);
-        return cd ? { ...ld, ...cd } : ld;
-      });
-      cloud.forEach(cd => {
-        if (!merged.find(m => m.id === cd.id)) merged.push(cd);
-      });
-      await idb.set('drivers', merged);
-      return merged;
+      await idb.set('drivers', cloud);
+      return cloud;
     } catch (e) { return local; }
   },
 
@@ -221,15 +214,8 @@ export const dbService = {
     try {
       const res = await executeSql(`SELECT data FROM stores`);
       const cloud = res.map(r => r.data);
-      const merged = local.map(ls => {
-        const cs = cloud.find(c => c.id === ls.id);
-        return cs ? { ...ls, ...cs } : ls;
-      });
-      cloud.forEach(cs => {
-        if (!merged.find(m => m.id === cs.id)) merged.push(cs);
-      });
-      await idb.set('stores', merged);
-      return merged;
+      await idb.set('stores', cloud);
+      return cloud;
     } catch (e) { return local; }
   },
 
@@ -257,23 +243,8 @@ export const dbService = {
     try {
       const res = await executeSql(`SELECT data FROM orders ORDER BY timestamp DESC LIMIT 100`);
       const cloud = res.map(r => r.data);
-      const mergedMap = new Map();
-      local.forEach(o => mergedMap.set(o.id, o));
-      cloud.forEach(co => {
-        const existing = mergedMap.get(co.id);
-        if (existing) {
-          mergedMap.set(co.id, { 
-            ...existing, 
-            ...co, 
-            returnFeePaid: existing.returnFeePaid || co.returnFeePaid,
-            driverReportedReturn: existing.driverReportedReturn || co.driverReportedReturn
-          });
-        } else {
-          mergedMap.set(co.id, co);
-        }
-      });
-      const mergedArray = Array.from(mergedMap.values());
-      return mergedArray.sort((a,b) => b.timestamp - a.timestamp);
+      await idb.set('orders', cloud);
+      return cloud.sort((a,b) => b.timestamp - a.timestamp);
     } catch (e) { return local; }
   },
 
