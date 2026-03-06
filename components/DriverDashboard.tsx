@@ -444,8 +444,10 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     )}
 
                     <div className="flex gap-2">
-                        <a href={`https://www.google.com/maps/dir/?api=1&origin=${profile?.currentLocation?.lat},${profile?.currentLocation?.lng}&destination=${activeOrders[0].pickup.lat},${activeOrders[0].pickup.lng}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-gray-800 text-white py-4 rounded-xl text-center font-bold text-xs uppercase tracking-widest">Maps Coleta</a>
-                        <a href={`https://www.waze.com/ul?ll=${activeOrders[activeOrders.length - 1].dropoff.lat},${activeOrders[activeOrders.length - 1].dropoff.lng}&navigate=yes`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-[#33CCFF] text-white py-4 rounded-xl text-center font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                        <a href={`https://www.google.com/maps/dir/?api=1&origin=${profile?.currentLocation?.lat},${profile?.currentLocation?.lng}&destination=${commonStatus === OrderStatus.IN_TRANSIT ? activeOrders[0].dropoff.lat : activeOrders[0].pickup.lat},${commonStatus === OrderStatus.IN_TRANSIT ? activeOrders[0].dropoff.lng : activeOrders[0].pickup.lng}`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-gray-800 text-white py-4 rounded-xl text-center font-bold text-xs uppercase tracking-widest flex items-center justify-center">
+                          {commonStatus === OrderStatus.IN_TRANSIT ? 'Maps Entrega' : 'Maps Coleta'}
+                        </a>
+                        <a href={`https://www.waze.com/ul?ll=${commonStatus === OrderStatus.IN_TRANSIT ? activeOrders[0].dropoff.lat : activeOrders[0].pickup.lat},${commonStatus === OrderStatus.IN_TRANSIT ? activeOrders[0].dropoff.lng : activeOrders[0].pickup.lng}&navigate=yes`} target="_blank" rel="noopener noreferrer" className="flex-1 bg-[#33CCFF] text-white py-4 rounded-xl text-center font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2">
                           <img src="https://img.icons8.com/color/48/waze.png" className="h-5" alt="Waze" />
                           <span>Waze</span>
                         </a>
