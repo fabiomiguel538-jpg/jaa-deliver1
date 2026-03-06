@@ -365,9 +365,11 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
       id: pendingOrderId,
       storeId: profile.id,
       storeCity: profile.city || '', 
-      status: isScheduling 
-        ? OrderStatus.SCHEDULED
-        : (paymentType === 'WALLET' ? (preAssignedDriverId ? OrderStatus.ACCEPTED : OrderStatus.SEARCHING) : OrderStatus.PENDING_PAYMENT_CONFIRMATION),
+      status: paymentType === 'MANUAL' 
+        ? OrderStatus.PENDING_PAYMENT_CONFIRMATION
+        : (isScheduling 
+            ? OrderStatus.SCHEDULED
+            : (preAssignedDriverId ? OrderStatus.ACCEPTED : OrderStatus.SEARCHING)),
       pickup: safeStoreLocation,
       dropoff: { ...deliveryLocation, address: finalAddress },
       price: estimation.total,

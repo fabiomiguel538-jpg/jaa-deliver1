@@ -560,7 +560,11 @@ const App: React.FC = () => {
     updateStateAndSave(setStores, dbService.saveStores, prev => prev.map(s => s.id === id ? { ...s, accessValidity: expiration, paymentProofUrl: undefined, accessRequestType: undefined } : s));
   };
   const handleRejectRecharge = createGenericHandler(setRechargeRequests, dbService.saveRecharges, r => ({ ...r, status: RechargeRequestStatus.REJECTED }));
-  const handleApprovePayment = createGenericHandler(setGlobalOrders, dbService.saveOrders, o => ({ ...o, status: o.preAssignedDriverId ? OrderStatus.ACCEPTED : OrderStatus.SEARCHING, driverId: o.preAssignedDriverId }));
+  const handleApprovePayment = createGenericHandler(setGlobalOrders, dbService.saveOrders, o => ({ 
+    ...o, 
+    status: o.scheduledTime ? OrderStatus.SCHEDULED : (o.preAssignedDriverId ? OrderStatus.ACCEPTED : OrderStatus.SEARCHING), 
+    driverId: o.preAssignedDriverId 
+  }));
   const handleRejectPayment = createGenericHandler(setGlobalOrders, dbService.saveOrders, o => ({ ...o, status: OrderStatus.CANCELED }));
   const handleUpdateDriver = createGenericDataHandler(setDrivers, dbService.saveDrivers);
   const handleUpdateStore = createGenericDataHandler(setStores, dbService.saveStores);
