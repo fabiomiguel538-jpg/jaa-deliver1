@@ -186,7 +186,6 @@ const StoreRegistration: React.FC<StoreRegistrationProps> = ({ onSignup, onBack,
       setTimeout(() => {
         onSignup({ 
           ...form, 
-          address: `${form.address}, ${form.number}`, 
           location: { 
             lat: sanitizeCoord(coords.lat, -23.5505), 
             lng: sanitizeCoord(coords.lng, -46.6333), 

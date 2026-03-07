@@ -99,6 +99,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     cep: profile?.cep || '',
     city: profile?.city || '',
     address: profile?.address || '',
+    number: profile?.number || '',
     location: profile?.location || { lat: -23.5505, lng: -46.6333 }
   });
 
@@ -142,9 +143,8 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
   };
 
   useEffect(() => {
-    if (isEditingProfile) {
-      handleUseGps();
-    }
+    // Sincronização automática removida conforme solicitação.
+    // Agora a localização é 100% manual via botão de alvo.
   }, [isEditingProfile]);
 
   useEffect(() => {
@@ -192,6 +192,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
              setTempProfile(prev => ({
                ...prev,
                address: data.address.road || data.address.suburb || prev.address,
+               number: data.address.house_number || prev.number,
                city: data.address.city || data.address.town || prev.city,
                cep: (data.address.postcode || '').replace(/\D/g, '').substring(0, 8)
              }));
@@ -209,7 +210,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     if (!tempProfile.address && !tempProfile.cep) return;
     setIsAutoAdjusting(true);
     try {
-      const query = encodeURIComponent(`${tempProfile.address}, ${tempProfile.city}, Brazil`);
+      const query = encodeURIComponent(`${tempProfile.address}, ${tempProfile.number}, ${tempProfile.city}, Brazil`);
       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
       const data = await response.json();
       if (data && data.length > 0) {
@@ -891,9 +892,15 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         <input type="text" readOnly className="w-full px-5 py-3 bg-orange-50 text-[#F84F39] rounded-xl font-black text-[10px] uppercase" value={tempProfile.city} />
                      </div>
                    </div>
-                   <div className="space-y-1">
-                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Endereço</label>
-                     <input type="text" className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-xl font-bold text-sm outline-none" value={tempProfile.address} onChange={e => setTempProfile({...tempProfile, address: e.target.value})} />
+                   <div className="grid grid-cols-3 gap-3">
+                     <div className="col-span-2 space-y-1">
+                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Endereço</label>
+                       <input type="text" className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-xl font-bold text-sm outline-none" value={tempProfile.address} onChange={e => setTempProfile({...tempProfile, address: e.target.value})} />
+                     </div>
+                     <div className="space-y-1">
+                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Número</label>
+                       <input type="text" className="w-full px-5 py-3 bg-gray-50 border border-gray-100 rounded-xl font-bold text-sm outline-none focus:border-[#F84F39]" value={tempProfile.number} onChange={e => setTempProfile({...tempProfile, number: e.target.value})} />
+                     </div>
                    </div>
                    <button onClick={saveProfile} className="w-full jaa-gradient text-white py-4.5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl">SALVAR ALTERAÇÕES</button>
                 </div>

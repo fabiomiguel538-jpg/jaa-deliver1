@@ -113,6 +113,7 @@ export interface StoreProfile {
   cep: string;
   city: string;
   address: string;
+  number?: string;
   location: Location;
   status: StoreRegistrationStatus;
   registrationDate: string;
