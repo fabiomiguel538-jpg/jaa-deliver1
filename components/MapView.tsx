@@ -30,21 +30,23 @@ const isValidLocation = (loc?: Location): boolean => {
 };
 
 const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZoom = 14, radiusKm = 0 }) => {
-  const mapRef = useRef<any>(null);
+  const [map, setMap] = React.useState<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const leafletMarkers = useRef<Map<string, any>>(new Map());
   const circleRef = useRef<any>(null);
 
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !containerRef.current || mapRef.current) return;
+    if (!L || !containerRef.current || map) return;
 
     const startLat = sanitizeCoord(userLocation?.lat, -23.55);
     const startLng = sanitizeCoord(userLocation?.lng, -46.63);
     const safeZoom = sanitizeCoord(initialZoom, 14);
 
+    let mapInstance: any = null;
+
     try {
-      mapRef.current = L.map(containerRef.current, {
+      mapInstance = L.map(containerRef.current, {
         zoomControl: false,
         attributionControl: false,
         fadeAnimation: true
@@ -52,28 +54,31 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-      }).addTo(mapRef.current);
+      }).addTo(mapInstance);
+
+      setMap(mapInstance);
     } catch (err) {
       console.warn("Leaflet Init Catch:", err);
     }
 
     return () => {
-      if (mapRef.current) {
+      if (mapInstance) {
         try {
-          mapRef.current.remove();
+          mapInstance.remove();
         } catch (e) {}
-        mapRef.current = null;
       }
+      setMap(null);
+      leafletMarkers.current.clear();
     };
   }, []);
 
   useEffect(() => {
-    if (mapRef.current && isValidLocation(userLocation)) {
+    if (map && isValidLocation(userLocation)) {
       try {
         const lat = sanitizeCoord(userLocation!.lat, -23.55);
         const lng = sanitizeCoord(userLocation!.lng, -46.63);
         if (isValidNumber(lat) && isValidNumber(lng)) {
-            mapRef.current.flyTo([lat, lng], mapRef.current.getZoom(), {
+            map.flyTo([lat, lng], map.getZoom(), {
               duration: 1.5,
               animate: true
             });
@@ -82,11 +87,11 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
         console.warn("Mapa centralização ignorada", err);
       }
     }
-  }, [userLocation?.lat, userLocation?.lng]);
+  }, [map, userLocation?.lat, userLocation?.lng]);
 
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !mapRef.current) return;
+    if (!L || !map) return;
 
     if (circleRef.current) {
       circleRef.current.remove();
@@ -105,17 +110,17 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
               fillOpacity: 0.1,
               weight: 2,
               dashArray: '5, 10'
-            }).addTo(mapRef.current);
+            }).addTo(map);
         }
       } catch (e) {
         console.warn("Erro ao desenhar raio:", e);
       }
     }
-  }, [radiusKm, userLocation?.lat, userLocation?.lng]);
+  }, [map, radiusKm, userLocation?.lat, userLocation?.lng]);
 
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !mapRef.current) return;
+    if (!L || !map) return;
 
     const currentIds = new Set(markers.map(m => m.id));
     leafletMarkers.current.forEach((marker, id) => {
@@ -150,7 +155,7 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
       }
       
       const iconHtml = `
-        <div class="relative flex flex-col items-center">
+        <div class="relative flex flex-col items-center" style="width: 40px; height: 40px;">
           <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xl shadow-xl border-2 border-white transition-all transform ${extraClass}" 
                style="background: ${iconColor};">
             ${iconEmoji}
@@ -163,32 +168,36 @@ const MapView: React.FC<MapViewProps> = ({ markers, userLocation, zoom: initialZ
 
       const customIcon = L.divIcon({
         html: iconHtml,
-        className: '',
+        className: 'jaa-marker-icon',
         iconSize: [40, 40],
         iconAnchor: [20, 20]
       });
 
       try {
+        const position = L.latLng(lat, lng);
         let marker = leafletMarkers.current.get(m.id);
         if (marker) {
-          marker.setLatLng([lat, lng]);
+          marker.setLatLng(position);
           marker.setIcon(customIcon);
         } else {
-          marker = L.marker([lat, lng], { icon: customIcon }).addTo(mapRef.current);
+          marker = L.marker(position, { 
+            icon: customIcon,
+            zIndexOffset: m.type === 'STORE' ? 1000 : 500 
+          }).addTo(map);
           leafletMarkers.current.set(m.id, marker);
         }
       } catch (e) {
         console.warn("Marcador ignorado:", m.id, e);
       }
     });
-  }, [markers]);
+  }, [map, markers]);
 
   return (
     <div className="w-full h-full relative group">
       <div ref={containerRef} className="w-full h-full z-0 bg-gray-100" />
       <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-10">
-        <button onClick={() => mapRef.current?.zoomIn()} className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center text-xl font-bold text-gray-800 border border-gray-100 active:scale-90 transition-all">+</button>
-        <button onClick={() => mapRef.current?.zoomOut()} className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center text-xl font-bold text-gray-800 border border-gray-100 active:scale-90 transition-all">−</button>
+        <button onClick={() => map?.zoomIn()} className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center text-xl font-bold text-gray-800 border border-gray-100 active:scale-90 transition-all">+</button>
+        <button onClick={() => map?.zoomOut()} className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center text-xl font-bold text-gray-800 border border-gray-100 active:scale-90 transition-all">−</button>
       </div>
     </div>
   );

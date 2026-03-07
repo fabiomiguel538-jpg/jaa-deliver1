@@ -53,6 +53,7 @@ const formatDateTime = (timestamp: number) => new Date(timestamp).toLocaleString
 const StoreDashboard: React.FC<StoreDashboardProps> = ({ 
   onLogout, orders, onNewOrder, onCancelOrder, onReleaseOrder, onRechargeRequest, profile, settings, onlineDrivers, onUpdateRadius, onAccessRequest, onUpdateProfile, onConfirmReturn, onRefresh, isSyncing
 }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -618,11 +619,58 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
           >
             <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
           </button>
-          <button onClick={() => setIsEditingProfile(true)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">⚙️</button>
-          <button onClick={onLogout} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">🚪</button>
+          <button onClick={() => setIsMenuOpen(true)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">☰</button>
         </div>
       </header>
 
+      {/* Sidebar Menu */}
+      {isMenuOpen && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] animate-in fade-in"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          <div className="fixed top-0 right-0 h-full w-72 bg-white z-[101] shadow-2xl animate-in slide-in-from-right duration-300 p-8 flex flex-col">
+            <div className="flex justify-between items-center mb-10">
+              <div>
+                <h3 className="font-jaa font-black italic text-2xl text-gray-800">Menu</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Opções da Conta</p>
+              </div>
+              <button onClick={() => setIsMenuOpen(false)} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-gray-500 text-2xl">✕</button>
+            </div>
+            
+            <div className="flex-1 space-y-3">
+              <button 
+                onClick={() => { setIsEditingProfile(true); setIsMenuOpen(false); }}
+                className="flex items-center gap-4 w-full p-5 rounded-[2rem] hover:bg-gray-50 transition-all text-gray-700 font-black uppercase text-[11px] tracking-widest border border-transparent hover:border-gray-100 group"
+              >
+                <span className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-xl group-hover:bg-white group-hover:shadow-sm transition-all">⚙️</span>
+                <span>Configurações</span>
+              </button>
+              
+              <button 
+                onClick={() => { onLogout(); setIsMenuOpen(false); }}
+                className="flex items-center gap-4 w-full p-5 rounded-[2rem] hover:bg-red-50 hover:text-red-500 transition-all text-gray-700 font-black uppercase text-[11px] tracking-widest border border-transparent hover:border-red-100 group"
+              >
+                <span className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-xl group-hover:bg-white group-hover:shadow-sm transition-all">🚪</span>
+                <span>Sair da Conta</span>
+              </button>
+            </div>
+            
+            <div className="pt-8 border-t border-gray-100 mt-auto">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 jaa-gradient rounded-xl flex items-center justify-center text-white font-black text-xs shadow-md">
+                   <span className="font-jaa italic">PJ</span>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Pede Já Delivery</p>
+                  <p className="text-[9px] text-gray-300 font-bold">Versão 1.0.4</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-5 space-y-6">
