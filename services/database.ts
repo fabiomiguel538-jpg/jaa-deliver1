@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   pixKey: 'pix@jaadelivery.com',
   minPrice: 7.0,
   pricePerKm: 2.0,
+  kmFranchise: 0,
   minimumWithdrawalAmount: 80.0,
   driverEarningModel: 'PERCENTAGE',
   driverEarningPercentage: 85,

@@ -126,6 +126,7 @@ export interface StoreProfile {
   // Precificação Individual
   minPrice?: number;
   pricePerKm?: number;
+  kmFranchise?: number;
   returnFeeAmount?: number;
   driverEarningModel?: 'PERCENTAGE' | 'FIXED';
   driverEarningPercentage?: number;
@@ -159,6 +160,7 @@ export interface PlatformSettings {
   supportWhatsapp?: string;
   minPrice: number;
   pricePerKm: number;
+  kmFranchise: number;
   minimumWithdrawalAmount: number;
   driverEarningModel: 'PERCENTAGE' | 'FIXED';
   driverEarningPercentage: number;

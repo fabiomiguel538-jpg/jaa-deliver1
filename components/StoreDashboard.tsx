@@ -320,10 +320,12 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
       const dist = calculateDistance(safeStoreLocation, deliveryLocation);
       const activeMinPrice = profile.minPrice ?? settings.minPrice ?? 7;
       const activePricePerKm = profile.pricePerKm ?? settings.pricePerKm ?? 2;
+      const activeKmFranchise = profile.kmFranchise ?? settings.kmFranchise ?? 0;
       const activeReturnFee = profile.returnFeeAmount ?? settings.returnFeeAmount ?? 5;
       const includeReturn = deliveryPaymentMethod !== 'NONE';
 
-      const calculated = activeMinPrice + (dist * activePricePerKm);
+      const billableDist = Math.max(0, dist - activeKmFranchise);
+      const calculated = activeMinPrice + (billableDist * activePricePerKm);
       const baseTotal = Math.max(activeMinPrice, calculated);
       const finalTotal = includeReturn ? baseTotal + activeReturnFee : baseTotal;
       

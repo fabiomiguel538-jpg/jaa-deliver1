@@ -27,6 +27,11 @@ const getStatusInfo = (status: OrderStatus) => {
     }
 };
 
+const safeNum = (val: any, fallback: number = 0): number => {
+  const n = typeof val === 'number' ? val : parseFloat(String(val));
+  return isNaN(n) ? fallback : n;
+};
+
 type DateFilter = 'day' | 'week' | 'month' | 'all';
 
 const filterOrdersByDate = (orders: Order[], filter: DateFilter): Order[] => {
@@ -250,7 +255,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleSettingsChange = (field: keyof PlatformSettings, value: any) => {
-    const numericFields: (keyof PlatformSettings)[] = ['dailyPrice', 'monthlyPrice', 'minPrice', 'pricePerKm', 'minimumWithdrawalAmount', 'driverEarningPercentage', 'driverEarningFixed', 'returnFeeAmount'];
+    const numericFields: (keyof PlatformSettings)[] = ['dailyPrice', 'monthlyPrice', 'minPrice', 'pricePerKm', 'kmFranchise', 'minimumWithdrawalAmount', 'driverEarningPercentage', 'driverEarningFixed', 'returnFeeAmount'];
     if (numericFields.includes(field)) {
         const numericValue = parseFloat(value);
         setTempSettings(prev => ({...prev, [field]: isNaN(numericValue) ? 0 : numericValue}));
@@ -445,7 +450,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       );
       case 'pedidos': return (<div><h3 className="font-bold text-lg mb-4">Validação de Pagamentos ({pendingPayments.length})</h3><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{pendingPayments.map(order => (<div key={order.id} className="bg-white p-4 rounded-2xl shadow-sm border space-y-3"><div><p className="font-bold text-sm">Pedido #{order.id}</p><p className="text-xs text-gray-500">{allStores.find(s => s.id === order.storeId)?.name}</p><p className="font-black text-lg text-[#F84F39]">R$ {(order.price || 0).toFixed(2)}</p></div><button onClick={() => setSelectedOrderId(id => order.id)} className="w-full bg-blue-100 text-blue-600 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2">{Icons.receipt} VER COMPROVANTE</button></div>))}</div></div>);
-      case 'settings': return (<div className="bg-white p-8 rounded-[3rem] shadow-sm border max-w-4xl mx-auto space-y-10 animate-in slide-in-from-bottom-4 duration-500 pb-12"><div className="flex items-center gap-4"><div className="w-12 h-12 jaa-gradient rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg">⚙️</div><div><h3 className="text-2xl font-black text-gray-800 tracking-tight">Configurações do Sistema</h3></div></div><div className="space-y-6"><h4 className="text-sm font-black uppercase tracking-wider text-gray-500 border-b pb-2">Geral</h4><div className="space-y-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Administrador</label><input type="text" value={tempSettings.pixKey ?? ''} onChange={e => handleSettingsChange('pixKey', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp Suporte (Esqueci Senha)</label><input type="text" placeholder="Ex: 5511999999999" value={tempSettings.supportWhatsapp ?? ''} onChange={e => handleSettingsChange('supportWhatsapp', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div></div><h4 className="text-sm font-black uppercase tracking-wider text-gray-500 border-b pb-2 pt-6">Planos de Acesso (Lojistas)</h4><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Diário (R$)</label><input type="number" step="0.01" value={tempSettings.dailyPrice ?? 0} onChange={e => handleSettingsChange('dailyPrice', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Mensal (R$)</label><input type="number" step="0.01" value={tempSettings.monthlyPrice ?? 0} onChange={e => handleSettingsChange('monthlyPrice', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Valor Mínimo para Saque (R$)</label><input type="number" step="0.01" value={tempSettings.minimumWithdrawalAmount ?? 0} onChange={e => handleSettingsChange('minimumWithdrawalAmount', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div></div><button onClick={handleSaveSettings} className="w-full jaa-gradient text-white font-black py-6 rounded-[2rem] shadow-xl uppercase tracking-widest text-xs mt-12">SALVAR TODAS AS CONFIGURAÇÕES</button></div>);
+      case 'settings': return (<div className="bg-white p-8 rounded-[3rem] shadow-sm border max-w-4xl mx-auto space-y-10 animate-in slide-in-from-bottom-4 duration-500 pb-12"><div className="flex items-center gap-4"><div className="w-12 h-12 jaa-gradient rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg">⚙️</div><div><h3 className="text-2xl font-black text-gray-800 tracking-tight">Configurações do Sistema</h3></div></div><div className="space-y-6"><h4 className="text-sm font-black uppercase tracking-wider text-gray-500 border-b pb-2">Geral</h4><div className="space-y-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Administrador</label><input type="text" value={tempSettings.pixKey ?? ''} onChange={e => handleSettingsChange('pixKey', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp Suporte (Esqueci Senha)</label><input type="text" placeholder="Ex: 5511999999999" value={tempSettings.supportWhatsapp ?? ''} onChange={e => handleSettingsChange('supportWhatsapp', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" /></div></div><h4 className="text-sm font-black uppercase tracking-wider text-gray-500 border-b pb-2 pt-6">Precificação Padrão</h4>
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="space-y-1">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Mínimo (R$)</label>
+        <input type="number" step="0.01" value={safeNum(tempSettings.minPrice)} onChange={e => handleSettingsChange('minPrice', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+    </div>
+    <div className="space-y-1">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço por KM (R$)</label>
+        <input type="number" step="0.01" value={safeNum(tempSettings.pricePerKm)} onChange={e => handleSettingsChange('pricePerKm', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+    </div>
+    <div className="space-y-1">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Franquia de KM</label>
+        <input type="number" step="0.1" value={safeNum(tempSettings.kmFranchise)} onChange={e => handleSettingsChange('kmFranchise', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+    </div>
+</div>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-1">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Diário (R$)</label>
+        <input type="number" step="0.01" value={safeNum(tempSettings.dailyPrice)} onChange={e => handleSettingsChange('dailyPrice', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+    </div>
+    <div className="space-y-1">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Mensal (R$)</label>
+        <input type="number" step="0.01" value={safeNum(tempSettings.monthlyPrice)} onChange={e => handleSettingsChange('monthlyPrice', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+    </div>
+</div>
+<div className="space-y-1">
+    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Valor Mínimo para Saque (R$)</label>
+    <input type="number" step="0.01" value={safeNum(tempSettings.minimumWithdrawalAmount)} onChange={e => handleSettingsChange('minimumWithdrawalAmount', e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+</div>
+</div><button onClick={handleSaveSettings} className="w-full jaa-gradient text-white font-black py-6 rounded-[2rem] shadow-xl uppercase tracking-widest text-xs mt-12">SALVAR TODAS AS CONFIGURAÇÕES</button></div>);
       default: return <div>Selecione uma opção</div>
     }
   }
@@ -504,15 +538,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-1">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço Mínimo (R$)</label>
-            <input type="number" step="0.01" value={selectedStore.minPrice ?? settings.minPrice} onChange={e => onUpdateStore(selectedStore.id, { minPrice: parseFloat(e.target.value) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+            <input type="number" step="0.01" value={safeNum(selectedStore.minPrice, safeNum(settings.minPrice))} onChange={e => onUpdateStore(selectedStore.id, { minPrice: safeNum(e.target.value, safeNum(settings.minPrice)) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
         </div>
         <div className="space-y-1">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Preço por KM (R$)</label>
-            <input type="number" step="0.01" value={selectedStore.pricePerKm ?? settings.pricePerKm} onChange={e => onUpdateStore(selectedStore.id, { pricePerKm: parseFloat(e.target.value) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+            <input type="number" step="0.01" value={safeNum(selectedStore.pricePerKm, safeNum(settings.pricePerKm))} onChange={e => onUpdateStore(selectedStore.id, { pricePerKm: safeNum(e.target.value, safeNum(settings.pricePerKm)) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+        </div>
+        <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cobrar por KM após (KM)</label>
+            <input type="number" step="0.1" value={safeNum(selectedStore.kmFranchise, safeNum(settings.kmFranchise))} onChange={e => onUpdateStore(selectedStore.id, { kmFranchise: safeNum(e.target.value, safeNum(settings.kmFranchise)) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
         </div>
         <div className="space-y-1">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Taxa de Retorno (R$)</label>
-            <input type="number" step="0.01" value={selectedStore.returnFeeAmount ?? settings.returnFeeAmount} onChange={e => onUpdateStore(selectedStore.id, { returnFeeAmount: parseFloat(e.target.value) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+            <input type="number" step="0.01" value={safeNum(selectedStore.returnFeeAmount, safeNum(settings.returnFeeAmount))} onChange={e => onUpdateStore(selectedStore.id, { returnFeeAmount: safeNum(e.target.value, safeNum(settings.returnFeeAmount)) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
         </div>
     </div>
 
@@ -529,12 +567,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {(selectedStore.driverEarningModel ?? settings.driverEarningModel) === 'PERCENTAGE' ? (
             <div className="space-y-1 animate-in fade-in">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Porcentagem para Motoboy (%)</label>
-                <input type="number" value={selectedStore.driverEarningPercentage ?? settings.driverEarningPercentage} onChange={e => onUpdateStore(selectedStore.id, { driverEarningPercentage: parseFloat(e.target.value) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+                <input type="number" value={safeNum(selectedStore.driverEarningPercentage, safeNum(settings.driverEarningPercentage))} onChange={e => onUpdateStore(selectedStore.id, { driverEarningPercentage: safeNum(e.target.value, safeNum(settings.driverEarningPercentage)) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
             </div>
         ) : (
             <div className="space-y-1 animate-in fade-in">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Taxa Fixa do App por Corrida (R$)</label>
-                <input type="number" step="0.01" value={selectedStore.driverEarningFixed ?? settings.driverEarningFixed} onChange={e => onUpdateStore(selectedStore.id, { driverEarningFixed: parseFloat(e.target.value) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
+                <input type="number" step="0.01" value={safeNum(selectedStore.driverEarningFixed, safeNum(settings.driverEarningFixed))} onChange={e => onUpdateStore(selectedStore.id, { driverEarningFixed: safeNum(e.target.value, safeNum(settings.driverEarningFixed)) })} className="w-full p-4 bg-white border border-orange-200 rounded-2xl outline-none font-bold focus:border-[#F84F39]" />
             </div>
         )}
     </div>
