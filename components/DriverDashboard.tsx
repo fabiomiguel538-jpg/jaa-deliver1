@@ -90,12 +90,18 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const handleToggleOnlineStatus = () => {
     const nextStatus = !isOnline;
     if (nextStatus) {
-      if ("Notification" in window && Notification.permission !== "granted") {
-          Notification.requestPermission();
+      if ("Notification" in window) {
+        Notification.requestPermission();
       }
     }
     onToggleOnline(profile.id, nextStatus);
   };
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
   useEffect(() => {
@@ -122,7 +128,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
   }, [allOrders, activeOrders, onRefresh]);
 
-  // CORREÇÃO CRÍTICA: Notificações no Chrome Mobile podem causar Crash (TypeError)
+  // SISTEMA DE ALERTA COMPLETO: Som, Vibração, Notificação e Confirmação
   useEffect(() => {
     if (lastAvailableCount.current === undefined) {
       lastAvailableCount.current = cityOrders.length;
@@ -133,32 +139,50 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       const newestOrder = cityOrders.reduce((a, b) => (b.timestamp > a.timestamp ? b : a), cityOrders[0]);
       const displayEarning = (newestOrder?.driverEarning || 0) + (newestOrder?.hasReturnFee ? (newestOrder?.returnFeePrice || 0) : 0);
       
-      // Chrome para Android não suporta "new Notification()". Ele usa "ServiceWorkerRegistration.showNotification()".
-      // Para evitar que o app trave com tela branca, verificamos se o construtor é uma função válida no contexto.
+      // 1. Som de Alerta
+      try {
+        const audio = new Audio('https://actions.google.com/sounds/v1/alarms/notification_high_pitch.ogg');
+        audio.play().catch(e => console.warn("Erro ao tocar áudio:", e));
+      } catch (e) {
+        console.warn("Áudio não suportado");
+      }
+
+      // 2. Vibração
+      if ("vibrate" in navigator) {
+        navigator.vibrate([500, 200, 500]);
+      }
+
+      // 3. Notificação Nativa (Segundo Plano)
       if ("Notification" in window && Notification.permission === "granted") {
         try {
-          // Apenas tenta instanciar se não for Chrome Mobile (que dispara erro ao usar o construtor diretamente)
-          new Notification("🚀 Nova Corrida!", {
-            body: `R$ ${displayEarning.toFixed(2)} - ${newestOrder?.pickup?.address || 'PedeJá'}`,
+          new Notification('Nova Corrida Disponível!', { 
+            body: 'Toque para ver os detalhes.', 
+            requireInteraction: true,
             icon: APP_LOGO,
-            badge: APP_LOGO,
-            tag: "new-order",
+            tag: "new-order-alert"
           });
         } catch (e) {
-          console.warn("Nativo de notificações não disponível neste navegador/dispositivo.");
+          // Fallback para ServiceWorker se necessário, mas mantendo o solicitado
+          console.warn("Erro ao disparar notificação nativa");
         }
       }
 
-      // Exibir alerta nativo para aceitar ou recusar a corrida
+      // 4. Caixa de Diálogo Nativa (Atraso Estratégico para não bloquear o som)
       setTimeout(() => {
-        const accept = window.confirm(`Nova corrida disponível!\nValor: R$ ${displayEarning.toFixed(2)}\nEstabelecimento: ${newestOrder?.pickup?.address?.split(',')[0] || 'PedeJá'}\n\nDeseja aceitar?`);
+        const message = `NOVA CORRIDA DISPONÍVEL!\n\n` +
+                        `Valor: R$ ${displayEarning.toFixed(2)}\n` +
+                        `Distância: ${newestOrder.distance.toFixed(1)} km\n` +
+                        `Origem: ${newestOrder.pickup.address?.split(',')[0]}\n\n` +
+                        `Deseja aceitar esta entrega?`;
+        
+        const accept = window.confirm(message);
         if (accept) {
           onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
         }
-      }, 100);
+      }, 500);
     }
     lastAvailableCount.current = cityOrders.length;
-  }, [cityOrders, isOnline]);
+  }, [cityOrders, isOnline, profile.id, onUpdateStatus]);
 
   useEffect(() => {
     let watchId: number;
