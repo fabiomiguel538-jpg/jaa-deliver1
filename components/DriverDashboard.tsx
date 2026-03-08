@@ -31,6 +31,10 @@ const formatDateTime = (timestamp: number) => {
   }
 };
 
+// 1. Pré-carregar o Áudio Globalmente (Garante que esteja baixado antes da corrida)
+const alertSound = new Audio('https://actions.google.com/sounds/v1/alarms/notification_high_pitch.ogg');
+alertSound.load(); // Força o carregamento antecipado
+
 const DriverDashboard: React.FC<DriverDashboardProps> = ({ 
   onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing
 }) => {
@@ -139,49 +143,37 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       const newestOrder = cityOrders.reduce((a, b) => (b.timestamp > a.timestamp ? b : a), cityOrders[0]);
       const displayEarning = (newestOrder?.driverEarning || 0) + (newestOrder?.hasReturnFee ? (newestOrder?.returnFeePrice || 0) : 0);
       
-      // 1. Som de Alerta Blindado
-      try {
-        const audio = new Audio('https://actions.google.com/sounds/v1/alarms/notification_high_pitch.ogg');
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.warn("Autoplay bloqueado pelo navegador. O som só tocará após interação do usuário.", e);
-          });
-        }
-      } catch (e) {
-        console.warn("Falha ao instanciar áudio:", e);
-      }
+      // 2. Tocar Áudio Pré-carregado com Tratamento de Erro
+      alertSound.play().catch(e => console.error('Erro de áudio:', e));
 
-      // 2. Vibração Agressiva (Longo e insistente)
+      // 3. Vibração Agressiva
       if ("vibrate" in navigator) {
-        navigator.vibrate([1000, 500, 1000, 500, 2000, 500, 1000, 500, 2000]);
+        navigator.vibrate([1000, 500, 1000, 500, 2000]);
       }
 
-      // 3. Notificação via Service Worker (Garante funcionamento em segundo plano)
+      // 4. Notificação via Service Worker (Obrigatório para Status Bar em WebView)
       if ("Notification" in window && Notification.permission === "granted") {
-        const notificationTitle = '🚀 Nova Corrida Disponível!';
-        const notificationOptions = {
-          body: `Valor: R$ ${displayEarning.toFixed(2)} - Toque para abrir.`,
-          icon: APP_LOGO,
-          badge: APP_LOGO,
-          tag: "new-order-alert",
-          requireInteraction: true,
-          vibrate: [200, 100, 200]
-        };
-
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then(registration => {
-            registration.showNotification(notificationTitle, notificationOptions);
-          }).catch(() => {
-            // Fallback para notificação padrão se SW falhar
-            new Notification(notificationTitle, notificationOptions);
+            registration.showNotification('Nova Corrida Disponível!', {
+              body: `R$ ${displayEarning.toFixed(2)} - Abra para ver os detalhes`,
+              requireInteraction: true,
+              vibrate: [1000, 500, 1000],
+              icon: APP_LOGO,
+              badge: APP_LOGO,
+              tag: "new-order-alert"
+            } as any);
+          }).catch(err => {
+            console.error("Erro ao usar Service Worker para notificação:", err);
+            new Notification('Nova Corrida Disponível!', { body: 'Toque para ver os detalhes.' });
           });
         } else {
-          new Notification(notificationTitle, notificationOptions);
+          new Notification('Nova Corrida Disponível!', { body: 'Toque para ver os detalhes.' });
         }
       }
 
-      // 4. Caixa de Diálogo Nativa (Atraso OBRIGATÓRIO de 1.5s para permitir som/vibração)
+      // 5. Caixa de Diálogo Nativa com Atraso OBRIGATÓRIO de 1.5s
+      // Isso permite que o som comece e a notificação apareça antes do "freeze" do confirm()
       setTimeout(() => {
         const message = `⚠️ NOVA CORRIDA DISPONÍVEL!\n\n` +
                         `💰 Valor: R$ ${displayEarning.toFixed(2)}\n` +
