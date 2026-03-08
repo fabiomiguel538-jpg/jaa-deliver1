@@ -139,47 +139,61 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       const newestOrder = cityOrders.reduce((a, b) => (b.timestamp > a.timestamp ? b : a), cityOrders[0]);
       const displayEarning = (newestOrder?.driverEarning || 0) + (newestOrder?.hasReturnFee ? (newestOrder?.returnFeePrice || 0) : 0);
       
-      // 1. Som de Alerta
+      // 1. Som de Alerta Blindado
       try {
         const audio = new Audio('https://actions.google.com/sounds/v1/alarms/notification_high_pitch.ogg');
-        audio.play().catch(e => console.warn("Erro ao tocar áudio:", e));
-      } catch (e) {
-        console.warn("Áudio não suportado");
-      }
-
-      // 2. Vibração
-      if ("vibrate" in navigator) {
-        navigator.vibrate([500, 200, 500]);
-      }
-
-      // 3. Notificação Nativa (Segundo Plano)
-      if ("Notification" in window && Notification.permission === "granted") {
-        try {
-          new Notification('Nova Corrida Disponível!', { 
-            body: 'Toque para ver os detalhes.', 
-            requireInteraction: true,
-            icon: APP_LOGO,
-            tag: "new-order-alert"
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.warn("Autoplay bloqueado pelo navegador. O som só tocará após interação do usuário.", e);
           });
-        } catch (e) {
-          // Fallback para ServiceWorker se necessário, mas mantendo o solicitado
-          console.warn("Erro ao disparar notificação nativa");
+        }
+      } catch (e) {
+        console.warn("Falha ao instanciar áudio:", e);
+      }
+
+      // 2. Vibração Agressiva (Longo e insistente)
+      if ("vibrate" in navigator) {
+        navigator.vibrate([1000, 500, 1000, 500, 2000, 500, 1000, 500, 2000]);
+      }
+
+      // 3. Notificação via Service Worker (Garante funcionamento em segundo plano)
+      if ("Notification" in window && Notification.permission === "granted") {
+        const notificationTitle = '🚀 Nova Corrida Disponível!';
+        const notificationOptions = {
+          body: `Valor: R$ ${displayEarning.toFixed(2)} - Toque para abrir.`,
+          icon: APP_LOGO,
+          badge: APP_LOGO,
+          tag: "new-order-alert",
+          requireInteraction: true,
+          vibrate: [200, 100, 200]
+        };
+
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(registration => {
+            registration.showNotification(notificationTitle, notificationOptions);
+          }).catch(() => {
+            // Fallback para notificação padrão se SW falhar
+            new Notification(notificationTitle, notificationOptions);
+          });
+        } else {
+          new Notification(notificationTitle, notificationOptions);
         }
       }
 
-      // 4. Caixa de Diálogo Nativa (Atraso Estratégico para não bloquear o som)
+      // 4. Caixa de Diálogo Nativa (Atraso OBRIGATÓRIO de 1.5s para permitir som/vibração)
       setTimeout(() => {
-        const message = `NOVA CORRIDA DISPONÍVEL!\n\n` +
-                        `Valor: R$ ${displayEarning.toFixed(2)}\n` +
-                        `Distância: ${newestOrder.distance.toFixed(1)} km\n` +
-                        `Origem: ${newestOrder.pickup.address?.split(',')[0]}\n\n` +
-                        `Deseja aceitar esta entrega?`;
+        const message = `⚠️ NOVA CORRIDA DISPONÍVEL!\n\n` +
+                        `💰 Valor: R$ ${displayEarning.toFixed(2)}\n` +
+                        `📏 Distância: ${newestOrder.distance.toFixed(1)} km\n` +
+                        `📍 Origem: ${newestOrder.pickup.address?.split(',')[0]}\n\n` +
+                        `Deseja aceitar esta entrega agora?`;
         
         const accept = window.confirm(message);
         if (accept) {
           onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
         }
-      }, 500);
+      }, 1500);
     }
     lastAvailableCount.current = cityOrders.length;
   }, [cityOrders, isOnline, profile.id, onUpdateStatus]);
