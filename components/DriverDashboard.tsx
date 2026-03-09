@@ -166,6 +166,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         new Notification(titulo, { body: detalhes });
       }
       
+      // Atualiza a lista de corridas imediatamente
+      onRefresh();
+      
       const timeoutId = setTimeout(() => {
         const message = `${titulo}\n\n${detalhes}\n\nDeseja aceitar esta entrega agora?`;
         
