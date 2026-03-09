@@ -178,8 +178,8 @@ const App: React.FC = () => {
   }, [loadAllData]);
   
   useEffect(() => {
-    // Configuração do intervalo de atualização automática para exatamente 20 segundos (20.000ms)
-    const POLLING_INTERVAL = 20000; 
+    // Configuração do intervalo de atualização automática para exatamente 1 minuto (60.000ms)
+    const POLLING_INTERVAL = 60000; 
     
     const pollData = setInterval(() => {
       // A busca de dados ocorre em segundo plano se houver um usuário logado e não houver sincronização ativa
