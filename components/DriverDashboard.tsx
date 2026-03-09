@@ -2,6 +2,21 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Order, OrderStatus, DriverProfile, Location, DriverRegistrationStatus, PlatformSettings, WithdrawalRequest, WithdrawalRequestStatus } from '../types';
 import MapView from './MapView';
 import { APP_LOGO } from '../constants';
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC0jC_pMntiAj_XepIXauLsYh8vojOX-Mo",
+  authDomain: "pedeja-b9080.firebaseapp.com",
+  projectId: "pedeja-b9080",
+  storageBucket: "pedeja-b9080.firebasestorage.app",
+  messagingSenderId: "479512861371",
+  appId: "1:479512861371:web:0d3ae540e90882ee02a79e",
+  measurementId: "G-JZKXH4EBQX"
+};
+
+const app = initializeApp(firebaseConfig);
+const messaging = getMessaging(app);
 
 interface DriverDashboardProps {
   onLogout: () => void;
@@ -9,7 +24,7 @@ interface DriverDashboardProps {
   scheduledOrders: Order[];
   activeOrders: Order[];
   allOrders: Order[]; 
-  onUpdateStatus: (id: string, status: OrderStatus, driverId?: string) => void;
+  onUpdateStatus: (id: string, status: OrderStatus, driverId?: string) => Promise<void> | void;
   onReportReturn: (orderId: string) => void;
   balance: number;
   profile: DriverProfile;
@@ -56,6 +71,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const isReturning = returningOrders.length > 0;
 
+  const [isUpdating, setIsUpdating] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -91,20 +107,42 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     return withdrawalRequests.some(r => r.driverId === profile?.id && r.status === WithdrawalRequestStatus.PENDING);
   }, [withdrawalRequests, profile?.id]);
 
-  const handleToggleOnlineStatus = () => {
+  const handleToggleOnlineStatus = async () => {
     const nextStatus = !isOnline;
     if (nextStatus) {
-      if ("Notification" in window) {
-        Notification.requestPermission();
-      }
+      await requestNotificationPermission();
     }
     onToggleOnline(profile.id, nextStatus);
   };
 
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+  const requestNotificationPermission = async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const token = await getToken(messaging, { vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc' });
+        if (token) {
+          console.log("FCM Token:", token);
+          onUpdateProfile(profile.id, { fcmToken: token });
+        } else {
+          console.log("Nenhum token de registro disponível.");
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao obter token:", error);
     }
+  };
+
+  useEffect(() => {
+    requestNotificationPermission();
+
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('Mensagem recebida com o app aberto: ', payload);
+      alert(`Nova Notificação: ${payload.notification?.title}\n${payload.notification?.body}`);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
@@ -174,7 +212,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
       // 5. Caixa de Diálogo Nativa com Atraso OBRIGATÓRIO de 1.5s
       // Isso permite que o som comece e a notificação apareça antes do "freeze" do confirm()
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         const message = `⚠️ NOVA CORRIDA DISPONÍVEL!\n\n` +
                         `💰 Valor: R$ ${displayEarning.toFixed(2)}\n` +
                         `📏 Distância: ${newestOrder.distance.toFixed(1)} km\n` +
@@ -186,6 +224,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
         }
       }, 1500);
+      
+      lastAvailableCount.current = cityOrders.length;
+      return () => clearTimeout(timeoutId);
     }
     lastAvailableCount.current = cityOrders.length;
   }, [cityOrders, isOnline, profile.id, onUpdateStatus]);
@@ -237,30 +278,41 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     setIsEditingProfile(false);
   };
 
-  const handleGlobalStatusUpdate = () => {
-    if (activeOrders.length === 0) return;
-    const currentStatus = activeOrders[0].status;
-    let nextStatus: OrderStatus | null = null;
-    if (currentStatus === OrderStatus.ACCEPTED) nextStatus = OrderStatus.PICKUP;
-    else if (currentStatus === OrderStatus.PICKUP) nextStatus = OrderStatus.IN_TRANSIT;
-    if (nextStatus) onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
+  const handleGlobalStatusUpdate = async () => {
+    if (activeOrders.length === 0 || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      const currentStatus = activeOrders[0].status;
+      let nextStatus: OrderStatus | null = null;
+      if (currentStatus === OrderStatus.ACCEPTED) nextStatus = OrderStatus.PICKUP;
+      else if (currentStatus === OrderStatus.PICKUP) nextStatus = OrderStatus.IN_TRANSIT;
+      if (nextStatus) await onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  const handleFinishDelivery = (order: Order) => {
-    if (!order.requiresDeliveryCode) {
-        onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
-    } else {
-        const code = deliveryCodes[order.id];
-        if (code?.trim() === order.deliveryCode) {
-            onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
-            setDeliveryCodes(prev => {
-              const next = {...prev};
-              delete next[order.id];
-              return next;
-            });
-        } else {
-            alert("Código de entrega incorreto para este pedido!");
-        }
+  const handleFinishDelivery = async (order: Order) => {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      if (!order.requiresDeliveryCode) {
+          await onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
+      } else {
+          const code = deliveryCodes[order.id];
+          if (code?.trim() === order.deliveryCode) {
+              await onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
+              setDeliveryCodes(prev => {
+                const next = {...prev};
+                delete next[order.id];
+                return next;
+              });
+          } else {
+              alert("Código de entrega incorreto para este pedido!");
+          }
+      }
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -509,7 +561,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs">🔑</span>
                                         </div>
                                       )}
-                                      <button onClick={() => handleFinishDelivery(order)} className="w-full bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-100 active:scale-95 transition-all text-[10px] uppercase tracking-widest">Finalizar Parada {idx + 1} ✓</button>
+                                      <button disabled={isUpdating} onClick={() => handleFinishDelivery(order)} className={`w-full bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-100 active:scale-95 transition-all text-[10px] uppercase tracking-widest ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>Finalizar Parada {idx + 1} ✓</button>
                                   </div>
                                 )}
                             </div>
@@ -518,7 +570,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </div>
                     
                     {commonStatus !== OrderStatus.IN_TRANSIT && (
-                        <button onClick={handleGlobalStatusUpdate} className="w-full jaa-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-red-100 active:scale-95 transition-all uppercase tracking-widest text-xs">{getStatusActionText(commonStatus)}</button>
+                        <button disabled={isUpdating} onClick={handleGlobalStatusUpdate} className={`w-full jaa-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-red-100 active:scale-95 transition-all uppercase tracking-widest text-xs ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>{getStatusActionText(commonStatus)}</button>
                     )}
 
                     <div className="flex gap-2">
@@ -641,7 +693,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                   <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-white border-4 border-[#0085FF] rounded-full flex-shrink-0 mt-1 shadow-sm"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Coleta</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.pickup.address}</p></div></div>
                                   <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-[#F84F39] border-4 border-white rounded-full flex-shrink-0 mt-1 shadow-lg"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Entrega</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.dropoff.address}</p></div></div>
                                 </div>
-                                <button onClick={() => onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id)} className="w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2">ACEITAR ROTA AGORA 🛵</button>
+                                <button disabled={isUpdating} onClick={async () => { if(isUpdating) return; setIsUpdating(true); try { await onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id); } finally { setIsUpdating(false); } }} className={`w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>ACEITAR ROTA AGORA 🛵</button>
                             </div>
                           );
                         })

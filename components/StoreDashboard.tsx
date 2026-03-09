@@ -396,6 +396,37 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
       customerPhone: customerPhone,
     };
     onNewOrder(newOrder);
+
+    // Disparar notificação para o motoboy via Netlify Function
+    if (preAssignedDriverId) {
+      const driver = onlineDrivers.find(d => d.id === preAssignedDriverId);
+      if (driver && driver.fcmToken) {
+        fetch('/api/dispararNotificacao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tokenFCM: driver.fcmToken,
+            dadosDoPedido: newOrder
+          })
+        }).catch(err => console.error('Erro ao disparar notificação:', err));
+      }
+    } else {
+      // Se não tem motoboy pré-atribuído, notifica todos os motoboys online da cidade
+      const cityDrivers = onlineDrivers.filter(d => (d.city || "").toLowerCase().trim() === (profile.city || "").toLowerCase().trim());
+      cityDrivers.forEach(driver => {
+        if (driver.fcmToken) {
+          fetch('/api/dispararNotificacao', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tokenFCM: driver.fcmToken,
+              dadosDoPedido: newOrder
+            })
+          }).catch(err => console.error('Erro ao disparar notificação:', err));
+        }
+      });
+    }
+
     resetRequest();
   };
 

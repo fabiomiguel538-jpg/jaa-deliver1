@@ -97,6 +97,7 @@ export interface DriverProfile {
   balance: number;
   isOnline?: boolean;
   currentLocation?: Location;
+  fcmToken?: string;
   pixKey?: string;
   isBlocked?: boolean;
   blockReason?: string;
