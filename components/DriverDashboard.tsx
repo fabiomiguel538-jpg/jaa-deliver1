@@ -229,16 +229,15 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       // 5. Caixa de Diálogo Nativa com Atraso OBRIGATÓRIO de 1.5s
       // Isso permite que o som comece e a notificação apareça antes do "freeze" do confirm()
       const timeoutId = setTimeout(() => {
-        // Agora usamos o modal via onMessage, mas caso a notificação não chegue,
-        // podemos abrir o modal por aqui também.
-        if (!isModalOpen) {
-          setDadosNovaCorrida({
-            orderId: newestOrder.id,
-            storeId: newestOrder.storeId,
-            titulo: '⚠️ NOVA CORRIDA DISPONÍVEL!',
-            detalhes: `💰 Valor: R$ ${displayEarning.toFixed(2)}\n📏 Distância: ${newestOrder.distance.toFixed(1)} km\n📍 Origem: ${newestOrder.pickup.address?.split(',')[0]}`
-          });
-          setIsModalOpen(true);
+        const message = `⚠️ NOVA CORRIDA DISPONÍVEL!\n\n` +
+                        `💰 Valor: R$ ${displayEarning.toFixed(2)}\n` +
+                        `📏 Distância: ${newestOrder.distance.toFixed(1)} km\n` +
+                        `📍 Origem: ${newestOrder.pickup.address?.split(',')[0]}\n\n` +
+                        `Deseja aceitar esta entrega agora?`;
+        
+        const accept = window.confirm(message);
+        if (accept) {
+          onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
         }
       }, 1500);
       
