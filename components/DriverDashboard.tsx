@@ -80,6 +80,47 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'orders' | 'scheduled' | 'history'>('orders');
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   
+  // Estados do Modal do Firebase FCM
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dadosNovaCorrida, setDadosNovaCorrida] = useState<{
+    id: string;
+    endereco: string;
+    valor: string;
+    distancia?: string;
+  } | null>(null);
+  const [isAccepting, setIsAccepting] = useState(false);
+
+  // ============================================================================
+  // FUNÇÃO PRINCIPAL DE UPDATE NO BANCO DE DADOS (INJETADA NO MODAL)
+  // ============================================================================
+  const aceitarPedidoModal = async (corridaId: string) => {
+    setIsAccepting(true);
+    try {
+      // Chama a função principal de update do banco de dados passando o ID que veio do Firebase
+      await onUpdateStatus(corridaId, OrderStatus.ACCEPTED, profile.id);
+      
+      // Prevenção de Duplicidade: A corrida passa para 'aceita' e some das 'disponíveis'
+      // O Modal SÓ PODE FECHAR depois que a requisição retornar sucesso
+      setIsModalOpen(false);
+      setDadosNovaCorrida(null);
+      
+      alertSound.pause();
+      alertSound.currentTime = 0;
+    } catch (error) {
+      console.error("Erro ao aceitar corrida:", error);
+      alert("Erro ao aceitar a corrida. Tente novamente.");
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const fecharModal = () => {
+    setIsModalOpen(false);
+    setDadosNovaCorrida(null);
+    alertSound.pause();
+    alertSound.currentTime = 0;
+  };
+
   const lastAvailableCount = useRef<number>();
 
   const [tempProfile, setTempProfile] = useState({
@@ -157,7 +198,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
             icon: APP_LOGO,
             badge: APP_LOGO,
             tag: "new-order-alert"
-          });
+          } as any);
         }).catch(err => {
           console.error("Erro ao usar Service Worker para notificação:", err);
           new Notification(titulo, { body: detalhes });
@@ -166,20 +207,15 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         new Notification(titulo, { body: detalhes });
       }
       
-      // Atualiza a lista de corridas imediatamente
-      onRefresh();
-      
       const timeoutId = setTimeout(() => {
-        const message = `${titulo}\n\n${detalhes}\n\nDeseja aceitar esta entrega agora?`;
-        
-        const accept = window.confirm(message);
-        
-        alertSound.pause();
-        alertSound.currentTime = 0;
-        
-        if (accept && corridaData.orderId) {
-          onUpdateStatus(corridaData.orderId, OrderStatus.ACCEPTED, profile.id);
-        }
+        // O ouvinte onMessage do Firebase DEVE salvar o ID da corrida no estado dadosNovaCorrida
+        setDadosNovaCorrida({
+          id: corridaData.id || corridaData.orderId || corridaData.corridaId || '',
+          endereco: corridaData.endereco || detalhes,
+          valor: corridaData.valor || '---',
+          distancia: corridaData.distancia || ''
+        });
+        setIsModalOpen(true);
       }, 1500);
     });
 
@@ -256,16 +292,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       // 5. Caixa de Diálogo Nativa com Atraso OBRIGATÓRIO de 1.5s
       // Isso permite que o som comece e a notificação apareça antes do "freeze" do confirm()
       const timeoutId = setTimeout(() => {
-        const message = `⚠️ NOVA CORRIDA DISPONÍVEL!\n\n` +
-                        `💰 Valor: R$ ${displayEarning.toFixed(2)}\n` +
-                        `📏 Distância: ${newestOrder.distance.toFixed(1)} km\n` +
-                        `📍 Origem: ${newestOrder.pickup.address?.split(',')[0]}\n\n` +
-                        `Deseja aceitar esta entrega agora?`;
-        
-        const accept = window.confirm(message);
-        if (accept) {
-          onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
-        }
+        // O ouvinte onMessage do Firebase DEVE salvar o ID da corrida no estado dadosNovaCorrida
+        setDadosNovaCorrida({
+          id: newestOrder.id,
+          endereco: newestOrder.pickup.address?.split(',')[0] || 'Endereço não informado',
+          valor: displayEarning.toFixed(2),
+          distancia: newestOrder.distance.toFixed(1)
+        });
+        setIsModalOpen(true);
       }, 1500);
       
       lastAvailableCount.current = cityOrders.length;
@@ -837,6 +871,82 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </div>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* ============================================================================ */}
+      {/* MODAL DE NOVA CORRIDA (FCM) */}
+      {/* ============================================================================ */}
+      {isModalOpen && dadosNovaCorrida && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden border-4 border-white animate-in zoom-in-95">
+            <div className="bg-[#F84F39] p-6 text-center">
+              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <span className="text-3xl animate-bounce">🛵</span>
+              </div>
+              <h3 className="text-2xl font-black text-white font-jaa italic tracking-tight">Nova Corrida!</h3>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-6 space-y-3">
+                <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <span className="text-xl shrink-0 mt-0.5">📍</span>
+                  <div>
+                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">Endereço de Coleta</p>
+                    <p className="text-sm font-bold text-gray-800 leading-tight mt-0.5">{dadosNovaCorrida.endereco}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3 bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                  <span className="text-xl shrink-0 mt-0.5">💰</span>
+                  <div>
+                    <p className="text-[9px] text-emerald-600/70 font-black uppercase tracking-widest">Valor a Receber</p>
+                    <p className="text-2xl font-black text-emerald-600 mt-0.5">R$ {dadosNovaCorrida.valor}</p>
+                  </div>
+                </div>
+                
+                {dadosNovaCorrida.distancia && (
+                  <div className="flex items-start gap-3 bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                    <span className="text-xl shrink-0 mt-0.5">📏</span>
+                    <div>
+                      <p className="text-[9px] text-blue-600/70 font-black uppercase tracking-widest">Distância</p>
+                      <p className="text-sm font-bold text-blue-700 mt-0.5">{dadosNovaCorrida.distancia} km</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={fecharModal}
+                  disabled={isAccepting}
+                  className="flex-1 py-4 rounded-xl font-black text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 text-[10px] uppercase tracking-widest"
+                >
+                  Recusar
+                </button>
+                
+                {/* 
+                  AÇÃO REAL NO MODAL:
+                  O botão chama DIRETAMENTE a função aceitarPedidoModal passando o ID.
+                  O estado isAccepting desabilita o botão e mostra o spinner.
+                */}
+                <button
+                  onClick={() => aceitarPedidoModal(dadosNovaCorrida.id)}
+                  disabled={isAccepting}
+                  className="flex-[2] py-4 rounded-xl font-black text-white bg-emerald-500 hover:bg-emerald-600 transition-colors flex justify-center items-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30 text-[11px] uppercase tracking-widest"
+                >
+                  {isAccepting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Aceitando...
+                    </>
+                  ) : (
+                    'ACEITAR CORRIDA'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
