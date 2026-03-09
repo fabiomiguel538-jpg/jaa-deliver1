@@ -79,6 +79,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [activeTab, setActiveTab] = useState<'orders' | 'scheduled' | 'history'>('orders');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalLoading, setIsModalLoading] = useState(false);
   const [dadosNovaCorrida, setDadosNovaCorrida] = useState<any>(null);
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   
@@ -143,7 +144,15 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       if ("vibrate" in navigator) {
         navigator.vibrate([1000, 500, 1000, 500, 2000]);
       }
-      setDadosNovaCorrida(payload.data || payload.notification);
+      
+      // Extrair os detalhes da corrida diretamente do payload.data
+      const corridaData = payload.data || {};
+      setDadosNovaCorrida({
+        orderId: corridaData.orderId,
+        storeId: corridaData.storeId,
+        titulo: corridaData.titulo || payload.notification?.title || '🛵 Nova Corrida Disponível!',
+        detalhes: corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.'
+      });
       setIsModalOpen(true);
     });
 
@@ -825,26 +834,46 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
               <div className="flex flex-col gap-3 pt-2">
                 <button 
-                  onClick={() => {
+                  disabled={isModalLoading}
+                  onClick={async () => {
+                    if (isModalLoading) return;
+                    
                     alertSound.pause();
                     alertSound.currentTime = 0;
-                    setIsModalOpen(false);
-                    if (dadosNovaCorrida.orderId) {
-                      onUpdateStatus(dadosNovaCorrida.orderId, OrderStatus.ACCEPTED, profile.id);
+                    
+                    setIsModalLoading(true);
+                    
+                    try {
+                      if (dadosNovaCorrida.orderId) {
+                        await onUpdateStatus(dadosNovaCorrida.orderId, OrderStatus.ACCEPTED, profile.id);
+                      }
+                      setIsModalOpen(false);
+                      setDadosNovaCorrida(null);
+                    } catch (error) {
+                      console.error("Erro ao aceitar a corrida:", error);
+                      alert("Erro ao aceitar a corrida. Tente novamente.");
+                    } finally {
+                      setIsModalLoading(false);
                     }
                   }}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/30 active:scale-95 transition-all"
+                  className={`w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-2 ${isModalLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  ACEITAR CORRIDA
+                  {isModalLoading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ACEITANDO...
+                    </>
+                  ) : 'ACEITAR CORRIDA'}
                 </button>
                 <button 
+                  disabled={isModalLoading}
                   onClick={() => {
                     alertSound.pause();
                     alertSound.currentTime = 0;
                     setIsModalOpen(false);
                     setDadosNovaCorrida(null);
                   }}
-                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold py-4 rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all"
+                  className={`w-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold py-4 rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all ${isModalLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   RECUSAR
                 </button>
