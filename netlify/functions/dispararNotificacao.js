@@ -39,6 +39,8 @@ exports.handler = async (event) => {
       data: {
         orderId: dadosDoPedido.id,
         storeId: dadosDoPedido.storeId,
+        titulo: 'Nova Corrida Disponível! 🛵',
+        detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${dadosDoPedido.driverEarning.toFixed(2)}\n📏 Distância: ${dadosDoPedido.distance.toFixed(1)} km\n📍 Origem: ${dadosDoPedido.pickup.address?.split(',')[0]}`,
       },
       token: tokenFCM,
     };

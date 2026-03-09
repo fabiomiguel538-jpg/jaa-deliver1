@@ -78,6 +78,8 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [isGpsLoading, setIsGpsLoading] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [activeTab, setActiveTab] = useState<'orders' | 'scheduled' | 'history'>('orders');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dadosNovaCorrida, setDadosNovaCorrida] = useState<any>(null);
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   
   const lastAvailableCount = useRef<number>();
@@ -137,7 +139,12 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('Mensagem recebida com o app aberto: ', payload);
-      alert(`Nova Notificação: ${payload.notification?.title}\n${payload.notification?.body}`);
+      alertSound.play().catch(e => console.log(e));
+      if ("vibrate" in navigator) {
+        navigator.vibrate([1000, 500, 1000, 500, 2000]);
+      }
+      setDadosNovaCorrida(payload.data || payload.notification);
+      setIsModalOpen(true);
     });
 
     return () => {
@@ -213,15 +220,16 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       // 5. Caixa de Diálogo Nativa com Atraso OBRIGATÓRIO de 1.5s
       // Isso permite que o som comece e a notificação apareça antes do "freeze" do confirm()
       const timeoutId = setTimeout(() => {
-        const message = `⚠️ NOVA CORRIDA DISPONÍVEL!\n\n` +
-                        `💰 Valor: R$ ${displayEarning.toFixed(2)}\n` +
-                        `📏 Distância: ${newestOrder.distance.toFixed(1)} km\n` +
-                        `📍 Origem: ${newestOrder.pickup.address?.split(',')[0]}\n\n` +
-                        `Deseja aceitar esta entrega agora?`;
-        
-        const accept = window.confirm(message);
-        if (accept) {
-          onUpdateStatus(newestOrder.id, OrderStatus.ACCEPTED, profile.id);
+        // Agora usamos o modal via onMessage, mas caso a notificação não chegue,
+        // podemos abrir o modal por aqui também.
+        if (!isModalOpen) {
+          setDadosNovaCorrida({
+            orderId: newestOrder.id,
+            storeId: newestOrder.storeId,
+            titulo: '⚠️ NOVA CORRIDA DISPONÍVEL!',
+            detalhes: `💰 Valor: R$ ${displayEarning.toFixed(2)}\n📏 Distância: ${newestOrder.distance.toFixed(1)} km\n📍 Origem: ${newestOrder.pickup.address?.split(',')[0]}`
+          });
+          setIsModalOpen(true);
         }
       }, 1500);
       
@@ -794,6 +802,55 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </div>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* Modal de Nova Corrida */}
+      {isModalOpen && dadosNovaCorrida && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="bg-orange-500 p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+              <h2 className="text-white font-black text-2xl uppercase tracking-wider relative z-10">
+                {dadosNovaCorrida.titulo || 'Nova Corrida!'}
+              </h2>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="text-center">
+                <p className="text-gray-600 font-medium whitespace-pre-line text-sm leading-relaxed">
+                  {dadosNovaCorrida.detalhes || 'Detalhes não disponíveis.'}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 pt-2">
+                <button 
+                  onClick={() => {
+                    alertSound.pause();
+                    alertSound.currentTime = 0;
+                    setIsModalOpen(false);
+                    if (dadosNovaCorrida.orderId) {
+                      onUpdateStatus(dadosNovaCorrida.orderId, OrderStatus.ACCEPTED, profile.id);
+                    }
+                  }}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/30 active:scale-95 transition-all"
+                >
+                  ACEITAR CORRIDA
+                </button>
+                <button 
+                  onClick={() => {
+                    alertSound.pause();
+                    alertSound.currentTime = 0;
+                    setIsModalOpen(false);
+                    setDadosNovaCorrida(null);
+                  }}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold py-4 rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all"
+                >
+                  RECUSAR
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
