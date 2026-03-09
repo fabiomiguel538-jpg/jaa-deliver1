@@ -91,24 +91,29 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [isAccepting, setIsAccepting] = useState(false);
 
   // ============================================================================
-  // FUNÇÃO PRINCIPAL DE UPDATE NO BANCO DE DADOS (INJETADA NO MODAL)
+  // FUNÇÃO DE ACEITE INDEPENDENTE (DIRETO DO MODAL)
   // ============================================================================
-  const aceitarPedidoModal = async (corridaId: string) => {
+  const aceitarCorridaDiretoDoModal = async (corridaId: string) => {
+    if (!corridaId) {
+      alert("ERRO: ID da corrida não encontrado no payload do Firebase (undefined).");
+      return;
+    }
+
     setIsAccepting(true);
     try {
-      // Chama a função principal de update do banco de dados passando o ID que veio do Firebase
+      // Faz a requisição direta para a API/Banco de dados para atribuir a corrida ao motoboy,
+      // ignorando se a corrida já renderizou na lista da tela ou não.
       await onUpdateStatus(corridaId, OrderStatus.ACCEPTED, profile.id);
       
-      // Prevenção de Duplicidade: A corrida passa para 'aceita' e some das 'disponíveis'
-      // O Modal SÓ PODE FECHAR depois que a requisição retornar sucesso
+      // Apenas quando a requisição retornar SUCESSO, feche o Modal
       setIsModalOpen(false);
       setDadosNovaCorrida(null);
       
       alertSound.pause();
       alertSound.currentTime = 0;
     } catch (error) {
-      console.error("Erro ao aceitar corrida:", error);
-      alert("Erro ao aceitar a corrida. Tente novamente.");
+      console.error("Erro ao aceitar corrida direto do modal:", error);
+      alert(`Erro ao aceitar a corrida: ${error}`);
     } finally {
       setIsAccepting(false);
     }
@@ -208,9 +213,11 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       }
       
       const timeoutId = setTimeout(() => {
-        // O ouvinte onMessage do Firebase DEVE salvar o ID da corrida no estado dadosNovaCorrida
+        // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
+        const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
+        
         setDadosNovaCorrida({
-          id: corridaData.id || corridaData.orderId || corridaData.corridaId || '',
+          id: idCapturado || '',
           endereco: corridaData.endereco || detalhes,
           valor: corridaData.valor || '---',
           distancia: corridaData.distancia || ''
@@ -927,18 +934,18 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                 
                 {/* 
                   AÇÃO REAL NO MODAL:
-                  O botão chama DIRETAMENTE a função aceitarPedidoModal passando o ID.
+                  O botão chama DIRETAMENTE a função aceitarCorridaDiretoDoModal passando o ID.
                   O estado isAccepting desabilita o botão e mostra o spinner.
                 */}
                 <button
-                  onClick={() => aceitarPedidoModal(dadosNovaCorrida.id)}
+                  onClick={() => aceitarCorridaDiretoDoModal(dadosNovaCorrida.id)}
                   disabled={isAccepting}
                   className="flex-[2] py-4 rounded-xl font-black text-white bg-emerald-500 hover:bg-emerald-600 transition-colors flex justify-center items-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30 text-[11px] uppercase tracking-widest"
                 >
                   {isAccepting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Aceitando...
+                      Carregando...
                     </>
                   ) : (
                     'ACEITAR CORRIDA'
