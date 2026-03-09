@@ -147,6 +147,25 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       const titulo = corridaData.titulo || payload.notification?.title || '🛵 Nova Corrida Disponível!';
       const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
       
+      // Forçar a notificação no sistema operacional (Foreground)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.showNotification(titulo, {
+            body: detalhes,
+            requireInteraction: true,
+            vibrate: [1000, 500, 1000, 500, 2000],
+            icon: APP_LOGO,
+            badge: APP_LOGO,
+            tag: "new-order-alert"
+          });
+        }).catch(err => {
+          console.error("Erro ao usar Service Worker para notificação:", err);
+          new Notification(titulo, { body: detalhes });
+        });
+      } else {
+        new Notification(titulo, { body: detalhes });
+      }
+      
       const timeoutId = setTimeout(() => {
         const message = `${titulo}\n\n${detalhes}\n\nDeseja aceitar esta entrega agora?`;
         
