@@ -78,9 +78,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [isGpsLoading, setIsGpsLoading] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [activeTab, setActiveTab] = useState<'orders' | 'scheduled' | 'history'>('orders');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isModalLoading, setIsModalLoading] = useState(false);
-  const [dadosNovaCorrida, setDadosNovaCorrida] = useState<any>(null);
   const [deliveryCodes, setDeliveryCodes] = useState<Record<string, string>>({});
   
   const lastAvailableCount = useRef<number>();
@@ -147,13 +144,21 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       
       // Extrair os detalhes da corrida diretamente do payload.data
       const corridaData = payload.data || {};
-      setDadosNovaCorrida({
-        orderId: corridaData.orderId,
-        storeId: corridaData.storeId,
-        titulo: corridaData.titulo || payload.notification?.title || '🛵 Nova Corrida Disponível!',
-        detalhes: corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.'
-      });
-      setIsModalOpen(true);
+      const titulo = corridaData.titulo || payload.notification?.title || '🛵 Nova Corrida Disponível!';
+      const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
+      
+      const timeoutId = setTimeout(() => {
+        const message = `${titulo}\n\n${detalhes}\n\nDeseja aceitar esta entrega agora?`;
+        
+        const accept = window.confirm(message);
+        
+        alertSound.pause();
+        alertSound.currentTime = 0;
+        
+        if (accept && corridaData.orderId) {
+          onUpdateStatus(corridaData.orderId, OrderStatus.ACCEPTED, profile.id);
+        }
+      }, 1500);
     });
 
     return () => {
@@ -810,75 +815,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </div>
                 </div>
             </div>
-        </div>
-      )}
-
-      {/* Modal de Nova Corrida */}
-      {isModalOpen && dadosNovaCorrida && (
-        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="bg-orange-500 p-6 text-center relative overflow-hidden">
-              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
-              <h2 className="text-white font-black text-2xl uppercase tracking-wider relative z-10">
-                {dadosNovaCorrida.titulo || 'Nova Corrida!'}
-              </h2>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div className="text-center">
-                <p className="text-gray-600 font-medium whitespace-pre-line text-sm leading-relaxed">
-                  {dadosNovaCorrida.detalhes || 'Detalhes não disponíveis.'}
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 pt-2">
-                <button 
-                  disabled={isModalLoading}
-                  onClick={async () => {
-                    if (isModalLoading) return;
-                    
-                    alertSound.pause();
-                    alertSound.currentTime = 0;
-                    
-                    setIsModalLoading(true);
-                    
-                    try {
-                      if (dadosNovaCorrida.orderId) {
-                        await onUpdateStatus(dadosNovaCorrida.orderId, OrderStatus.ACCEPTED, profile.id);
-                      }
-                      setIsModalOpen(false);
-                      setDadosNovaCorrida(null);
-                    } catch (error) {
-                      console.error("Erro ao aceitar a corrida:", error);
-                      alert("Erro ao aceitar a corrida. Tente novamente.");
-                    } finally {
-                      setIsModalLoading(false);
-                    }
-                  }}
-                  className={`w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-2 ${isModalLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {isModalLoading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      ACEITANDO...
-                    </>
-                  ) : 'ACEITAR CORRIDA'}
-                </button>
-                <button 
-                  disabled={isModalLoading}
-                  onClick={() => {
-                    alertSound.pause();
-                    alertSound.currentTime = 0;
-                    setIsModalOpen(false);
-                    setDadosNovaCorrida(null);
-                  }}
-                  className={`w-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold py-4 rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all ${isModalLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  RECUSAR
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>
