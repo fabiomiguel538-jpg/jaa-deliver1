@@ -254,6 +254,8 @@ const App: React.FC = () => {
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus, driverId?: string) => {
     setIsSyncing(true);
     try {
+      let sourceOrders = globalOrders;
+
       // Se a ação for "ACEITAR" (ACCEPTED), fazemos uma verificação atômica no banco
       if (status === OrderStatus.ACCEPTED) {
         try {
@@ -268,6 +270,9 @@ const App: React.FC = () => {
             setGlobalOrders(latestOrders);
             return; // Interrompe a execução, bloqueando a atualização
           }
+
+          // Usa a lista mais recente do banco, pois a notificação pode ter chegado antes do polling local
+          sourceOrders = latestOrders;
         } catch (error) {
           console.error("Erro ao validar status do pedido:", error);
           alert("Erro de conexão ao tentar aceitar a corrida. Tente novamente.");
@@ -275,8 +280,11 @@ const App: React.FC = () => {
         }
       }
 
-      const order = globalOrders.find(o => o.id === orderId);
-      if (!order) return;
+      const order = sourceOrders.find(o => o.id === orderId);
+      if (!order) {
+        console.error("Pedido não encontrado na base de dados:", orderId);
+        return;
+      }
       
       const orderGroupIds = new Set<string>([orderId]);
       
@@ -286,9 +294,9 @@ const App: React.FC = () => {
       if (status !== OrderStatus.DELIVERED) {
         if (order.linkedToOrderId) {
           orderGroupIds.add(order.linkedToOrderId);
-          globalOrders.forEach(o => { if (o.linkedToOrderId === order.linkedToOrderId) orderGroupIds.add(o.id); });
+          sourceOrders.forEach(o => { if (o.linkedToOrderId === order.linkedToOrderId) orderGroupIds.add(o.id); });
         } else {
-          globalOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
+          sourceOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
         }
       }
 
@@ -299,7 +307,7 @@ const App: React.FC = () => {
         
         if (targetDriverId) {
           orderGroupIds.forEach(currentOrderId => {
-            const finishedOrder = globalOrders.find(o => o.id === currentOrderId);
+            const finishedOrder = sourceOrders.find(o => o.id === currentOrderId);
             // Só credita se o pedido não estiver entregue AINDA e NÃO tiver taxa de retorno pendente
             // (Se tiver taxa de retorno, o crédito ocorre via handleConfirmReturnRobust)
             if (finishedOrder && finishedOrder.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
@@ -316,7 +324,7 @@ const App: React.FC = () => {
         }
       }
 
-      const newOrders = globalOrders.map(o => orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o);
+      const newOrders = sourceOrders.map(o => orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o);
       await dbService.saveOrders(newOrders);
       setGlobalOrders(newOrders);
       
