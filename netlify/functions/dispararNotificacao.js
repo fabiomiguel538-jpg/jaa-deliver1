@@ -41,6 +41,8 @@ exports.handler = async (event) => {
         orderId: dadosDoPedido.id,
         valor: dadosDoPedido.driverEarning.toFixed(2),
         storeId: dadosDoPedido.storeId,
+        distancia_km: `${dadosDoPedido.distance.toFixed(1)} km`,
+        valorPorKm: (dadosDoPedido.driverEarning / (dadosDoPedido.distance || 1)).toFixed(2),
         titulo: 'Nova Corrida Disponível! 🛵',
         detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${dadosDoPedido.driverEarning.toFixed(2)}\n📏 Distância: ${dadosDoPedido.distance.toFixed(1)} km\n📍 Origem: ${dadosDoPedido.pickup.address?.split(',')[0]}`,
       },

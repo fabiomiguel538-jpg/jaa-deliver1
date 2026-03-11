@@ -42,6 +42,25 @@ const calculateDistance = (loc1: Location, loc2: Location): number => {
   return R * c;
 };
 
+/**
+ * Calcula a distância REAL de condução usando a API do OSRM (Gratuita).
+ * Para usar Google Maps, substitua a URL por:
+ * https://maps.googleapis.com/maps/api/distancematrix/json?origins=${lat1},${lng1}&destinations=${lat2},${lng2}&key=SUA_CHAVE
+ */
+const getDrivingDistance = async (loc1: Location, loc2: Location): Promise<number> => {
+  try {
+    const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${loc1.lng},${loc1.lat};${loc2.lng},${loc2.lat}?overview=false`);
+    const data = await response.json();
+    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+      return data.routes[0].distance / 1000; // OSRM retorna em metros
+    }
+  } catch (error) {
+    console.error('Erro ao calcular distância de condução:', error);
+  }
+  // Fallback para Haversine se a API falhar
+  return calculateDistance(loc1, loc2);
+};
+
 const sanitizeCoord = (val: any, fallback: number): number => {
   if (val === null || val === undefined) return fallback;
   const num = typeof val === 'number' ? val : parseFloat(String(val));
@@ -309,7 +328,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     setIsEditingProfile(false);
   };
 
-  const handleEstimate = () => {
+  const handleEstimate = async () => {
     if (!deliveryLocation || !safeStoreLocation) return;
     if (isScheduling && !scheduledTime) {
       alert("Por favor, selecione uma data e hora para o agendamento.");
@@ -318,8 +337,8 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
 
     setIsCalculating(true);
     
-    setTimeout(() => {
-      const dist = calculateDistance(safeStoreLocation, deliveryLocation);
+    try {
+      const dist = await getDrivingDistance(safeStoreLocation, deliveryLocation);
       const activeMinPrice = profile.minPrice ?? settings.minPrice ?? 7;
       const activePricePerKm = profile.pricePerKm ?? settings.pricePerKm ?? 2;
       const activeKmFranchise = profile.kmFranchise ?? settings.kmFranchise ?? 0;
@@ -333,8 +352,12 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
       
       setEstimation({ total: finalTotal, distance: dist });
       setPaymentStep('payment');
+    } catch (error) {
+      console.error('Erro na estimativa:', error);
+      alert('Erro ao calcular a distância. Tente novamente.');
+    } finally {
       setIsCalculating(false);
-    }, 600);
+    }
   };
 
   const createOrder = (paymentType: 'MANUAL' | 'WALLET') => {
