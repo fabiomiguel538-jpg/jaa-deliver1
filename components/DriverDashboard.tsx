@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Order, OrderStatus, DriverProfile, Location, DriverRegistrationStatus, PlatformSettings, WithdrawalRequest, WithdrawalRequestStatus } from '../types';
 import MapView from './MapView';
 import { APP_LOGO } from '../constants';
@@ -87,8 +88,35 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     endereco: string;
     valor: string;
     distancia?: string;
+    valorPorKm?: string;
+    paradas?: string;
+    nomeLoja?: string;
+    enderecoColeta?: string;
+    tipoEntrega?: string;
+    metodoPagamento?: string;
   } | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(20);
+
+  // Cronômetro do Modal
+  useEffect(() => {
+    let timer: any;
+    if (isModalOpen && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (isModalOpen && timeLeft === 0) {
+      fecharModal();
+    }
+    return () => clearInterval(timer);
+  }, [isModalOpen, timeLeft]);
+
+  // Resetar cronômetro ao abrir modal
+  useEffect(() => {
+    if (isModalOpen) {
+      setTimeLeft(20);
+    }
+  }, [isModalOpen]);
 
   // ============================================================================
   // FUNÇÃO DE ACEITE INDEPENDENTE (DIRETO DO MODAL)
@@ -194,22 +222,34 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
       
       // Forçar a notificação no sistema operacional (Foreground)
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.showNotification(titulo, {
+      if (Notification.permission === 'granted') {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(titulo, {
+              body: detalhes,
+              requireInteraction: true,
+              vibrate: [1000, 500, 1000, 500, 2000],
+              icon: APP_LOGO,
+              badge: APP_LOGO,
+              tag: "new-order-alert"
+            } as any);
+          }).catch(err => {
+            console.error("Erro ao usar Service Worker para notificação:", err);
+            new Notification(titulo, { 
+              body: detalhes,
+              icon: APP_LOGO,
+              badge: APP_LOGO,
+              requireInteraction: true
+            } as any);
+          });
+        } else {
+          new Notification(titulo, { 
             body: detalhes,
-            requireInteraction: true,
-            vibrate: [1000, 500, 1000, 500, 2000],
             icon: APP_LOGO,
             badge: APP_LOGO,
-            tag: "new-order-alert"
+            requireInteraction: true
           } as any);
-        }).catch(err => {
-          console.error("Erro ao usar Service Worker para notificação:", err);
-          new Notification(titulo, { body: detalhes });
-        });
-      } else {
-        new Notification(titulo, { body: detalhes });
+        }
       }
       
       const timeoutId = setTimeout(() => {
@@ -220,7 +260,13 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           id: idCapturado || '',
           endereco: corridaData.endereco || detalhes,
           valor: corridaData.valor || '---',
-          distancia: corridaData.distancia || ''
+          distancia: corridaData.distancia || '',
+          valorPorKm: corridaData.valorPorKm || '1,76',
+          paradas: corridaData.paradas || '1 parada',
+          nomeLoja: corridaData.nomeLoja || 'Estabelecimento',
+          enderecoColeta: corridaData.enderecoColeta || 'Endereço de coleta...',
+          tipoEntrega: corridaData.tipoEntrega || 'Nuvem',
+          metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
         });
         setIsModalOpen(true);
       }, 1500);
@@ -302,9 +348,15 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         // O ouvinte onMessage do Firebase DEVE salvar o ID da corrida no estado dadosNovaCorrida
         setDadosNovaCorrida({
           id: newestOrder.id,
-          endereco: newestOrder.pickup.address?.split(',')[0] || 'Endereço não informado',
+          endereco: newestOrder.dropoff.address || 'Endereço não informado',
           valor: displayEarning.toFixed(2),
-          distancia: newestOrder.distance.toFixed(1)
+          distancia: newestOrder.distance.toFixed(1) + 'km',
+          valorPorKm: (displayEarning / (newestOrder.distance || 1)).toFixed(2),
+          paradas: '1 parada',
+          nomeLoja: newestOrder.pickup.address?.split(',')[0] || 'Estabelecimento',
+          enderecoColeta: newestOrder.pickup.address || 'Endereço de coleta...',
+          tipoEntrega: 'Nuvem',
+          metodoPagamento: 'Carteira de créditos'
         });
         setIsModalOpen(true);
       }, 1500);
@@ -882,80 +934,118 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       )}
 
       {/* ============================================================================ */}
-      {/* MODAL DE NOVA CORRIDA (FCM) */}
+      {/* MODAL DE NOVA CORRIDA (FCM) - BOTTOM SHEET DESIGN */}
       {/* ============================================================================ */}
-      {isModalOpen && dadosNovaCorrida && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden border-4 border-white animate-in zoom-in-95">
-            <div className="bg-[#F84F39] p-6 text-center">
-              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <span className="text-3xl animate-bounce">🛵</span>
-              </div>
-              <h3 className="text-2xl font-black text-white font-jaa italic tracking-tight">Nova Corrida!</h3>
-            </div>
-            
-            <div className="p-6">
-              <div className="mb-6 space-y-3">
-                <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                  <span className="text-xl shrink-0 mt-0.5">📍</span>
-                  <div>
-                    <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">Endereço de Coleta</p>
-                    <p className="text-sm font-bold text-gray-800 leading-tight mt-0.5">{dadosNovaCorrida.endereco}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3 bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                  <span className="text-xl shrink-0 mt-0.5">💰</span>
-                  <div>
-                    <p className="text-[9px] text-emerald-600/70 font-black uppercase tracking-widest">Valor a Receber</p>
-                    <p className="text-2xl font-black text-emerald-600 mt-0.5">R$ {dadosNovaCorrida.valor}</p>
-                  </div>
-                </div>
-                
-                {dadosNovaCorrida.distancia && (
-                  <div className="flex items-start gap-3 bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                    <span className="text-xl shrink-0 mt-0.5">📏</span>
-                    <div>
-                      <p className="text-[9px] text-blue-600/70 font-black uppercase tracking-widest">Distância</p>
-                      <p className="text-sm font-bold text-blue-700 mt-0.5">{dadosNovaCorrida.distancia} km</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <button
+      <AnimatePresence>
+        {isModalOpen && dadosNovaCorrida && (
+          <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 backdrop-blur-sm overflow-hidden">
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
+            >
+              {/* Header com Recusar */}
+              <div className="p-4 flex justify-end">
+                <button 
                   onClick={fecharModal}
                   disabled={isAccepting}
-                  className="flex-1 py-4 rounded-xl font-black text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 text-[10px] uppercase tracking-widest"
+                  className="bg-gray-100 px-6 py-2 rounded-full text-red-500 font-bold text-sm active:scale-95 transition-all"
                 >
                   Recusar
                 </button>
-                
-                {/* 
-                  AÇÃO REAL NO MODAL:
-                  O botão chama DIRETAMENTE a função aceitarCorridaDiretoDoModal passando o ID.
-                  O estado isAccepting desabilita o botão e mostra o spinner.
-                */}
+              </div>
+
+              <div className="px-8 pb-8 flex-1 overflow-y-auto scrollbar-hide">
+                {/* Área de Preço (Destaque Central) */}
+                <div className="text-center mb-8">
+                  <h2 className="text-6xl font-bold text-gray-900 mb-2">
+                    R$ {dadosNovaCorrida.valor}
+                  </h2>
+                  <div className="inline-block bg-yellow-100 px-4 py-1 rounded-full mb-4">
+                    <span className="text-yellow-700 font-bold text-sm">
+                      R$ {dadosNovaCorrida.valorPorKm} por km
+                    </span>
+                  </div>
+                  <div className="flex justify-center gap-8 text-gray-500 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-xl">🚩</span> {dadosNovaCorrida.distancia}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-xl">📍</span> {dadosNovaCorrida.paradas}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Área da Rota (Timeline vertical) */}
+                <div className="relative pl-8 space-y-10 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:border-l-2 before:border-dashed before:border-gray-200">
+                  {/* Ponto de Coleta */}
+                  <div className="relative">
+                    <div className="absolute -left-8 top-0 w-6 h-6 bg-white border-2 border-blue-500 rounded flex items-center justify-center text-[10px] shadow-sm">
+                      📦
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800 text-base">
+                        {dadosNovaCorrida.nomeLoja}
+                      </span>
+                      <span className="text-xs text-gray-500 leading-tight mt-1">
+                        {dadosNovaCorrida.enderecoColeta}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Ponto de Entrega */}
+                  <div className="relative">
+                    <div className="absolute -left-8 top-0 w-6 h-6 bg-white border-2 border-red-500 rounded-full flex items-center justify-center text-[10px] shadow-sm">
+                      🚩
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800 text-base">1ª parada</span>
+                      <span className="text-xs text-gray-500 leading-tight mt-1">
+                        {dadosNovaCorrida.endereco}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="flex gap-2 mt-10">
+                  <span className="bg-gray-100 px-4 py-2 rounded-full text-gray-500 text-[10px] font-bold uppercase tracking-wider">
+                    {dadosNovaCorrida.tipoEntrega}
+                  </span>
+                  <span className="bg-gray-100 px-4 py-2 rounded-full text-gray-500 text-[10px] font-bold uppercase tracking-wider">
+                    {dadosNovaCorrida.metodoPagamento}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botão Aceitar e Cronômetro */}
+              <div className="p-6 bg-white border-t border-gray-50">
+                <div className="flex justify-between items-center mb-3 px-2">
+                  <div className="text-[10px] text-gray-300 font-bold">
+                    #{dadosNovaCorrida.id}
+                  </div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest ${timeLeft < 5 ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+                    Expira em {timeLeft}s
+                  </div>
+                </div>
                 <button
                   onClick={() => aceitarCorridaDiretoDoModal(dadosNovaCorrida.id)}
                   disabled={isAccepting}
-                  className="flex-[2] py-4 rounded-xl font-black text-white bg-emerald-500 hover:bg-emerald-600 transition-colors flex justify-center items-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30 text-[11px] uppercase tracking-widest"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-xl"
                 >
                   {isAccepting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Carregando...
-                    </>
+                    <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
                   ) : (
-                    'ACEITAR CORRIDA'
+                    `Aceitar entrega (${timeLeft})`
                   )}
                 </button>
               </div>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -33,11 +33,13 @@ exports.handler = async (event) => {
 
     const message = {
       notification: {
-        title: 'Nova Corrida Disponível! 🛵',
-        body: `Pedido #${dadosDoPedido.id} - R$ ${dadosDoPedido.driverEarning.toFixed(2)}`,
+        title: `Nova Corrida: R$ ${dadosDoPedido.driverEarning.toFixed(2)}`,
+        body: `Recolha: ${dadosDoPedido.pickup.address?.split(',')[0]}. 1 parada.`,
       },
       data: {
+        id: dadosDoPedido.id,
         orderId: dadosDoPedido.id,
+        valor: dadosDoPedido.driverEarning.toFixed(2),
         storeId: dadosDoPedido.storeId,
         titulo: 'Nova Corrida Disponível! 🛵',
         detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${dadosDoPedido.driverEarning.toFixed(2)}\n📏 Distância: ${dadosDoPedido.distance.toFixed(1)} km\n📍 Origem: ${dadosDoPedido.pickup.address?.split(',')[0]}`,
