@@ -218,39 +218,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       
       // Extrair os detalhes da corrida diretamente do payload.data
       const corridaData = payload.data || {};
-      const titulo = corridaData.titulo || payload.notification?.title || '🛵 Nova Corrida Disponível!';
       const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
-      
-      // Forçar a notificação no sistema operacional (Foreground)
-      if (Notification.permission === 'granted') {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then((registration) => {
-            registration.showNotification(titulo, {
-              body: detalhes,
-              requireInteraction: true,
-              vibrate: [1000, 500, 1000, 500, 2000],
-              icon: APP_LOGO,
-              badge: APP_LOGO,
-              tag: "new-order-alert"
-            } as any);
-          }).catch(err => {
-            console.error("Erro ao usar Service Worker para notificação:", err);
-            new Notification(titulo, { 
-              body: detalhes,
-              icon: APP_LOGO,
-              badge: APP_LOGO,
-              requireInteraction: true
-            } as any);
-          });
-        } else {
-          new Notification(titulo, { 
-            body: detalhes,
-            icon: APP_LOGO,
-            badge: APP_LOGO,
-            requireInteraction: true
-          } as any);
-        }
-      }
       
       const timeoutId = setTimeout(() => {
         // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
@@ -302,70 +270,10 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
   }, [allOrders, activeOrders, onRefresh]);
 
-  // SISTEMA DE ALERTA COMPLETO: Som, Vibração, Notificação e Confirmação
+  // Sincronização do contador de pedidos disponíveis
   useEffect(() => {
-    if (lastAvailableCount.current === undefined) {
-      lastAvailableCount.current = cityOrders.length;
-      return;
-    }
-
-    if (isOnline && cityOrders.length > 0 && cityOrders.length > lastAvailableCount.current) {
-      const newestOrder = cityOrders.reduce((a, b) => (b.timestamp > a.timestamp ? b : a), cityOrders[0]);
-      const displayEarning = (newestOrder?.driverEarning || 0) + (newestOrder?.hasReturnFee ? (newestOrder?.returnFeePrice || 0) : 0);
-      
-      // 2. Tocar Áudio Pré-carregado com Tratamento de Erro
-      alertSound.play().catch(e => console.error('Erro de áudio:', e));
-
-      // 3. Vibração Agressiva
-      if ("vibrate" in navigator) {
-        navigator.vibrate([1000, 500, 1000, 500, 2000]);
-      }
-
-      // 4. Notificação via Service Worker (Obrigatório para Status Bar em WebView)
-      if ("Notification" in window && Notification.permission === "granted") {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then(registration => {
-            registration.showNotification('Nova Corrida Disponível!', {
-              body: `R$ ${displayEarning.toFixed(2)} - Abra para ver os detalhes`,
-              requireInteraction: true,
-              vibrate: [1000, 500, 1000],
-              icon: APP_LOGO,
-              badge: APP_LOGO,
-              tag: "new-order-alert"
-            } as any);
-          }).catch(err => {
-            console.error("Erro ao usar Service Worker para notificação:", err);
-            new Notification('Nova Corrida Disponível!', { body: 'Toque para ver os detalhes.' });
-          });
-        } else {
-          new Notification('Nova Corrida Disponível!', { body: 'Toque para ver os detalhes.' });
-        }
-      }
-
-      // 5. Caixa de Diálogo Nativa com Atraso OBRIGATÓRIO de 1.5s
-      // Isso permite que o som comece e a notificação apareça antes do "freeze" do confirm()
-      const timeoutId = setTimeout(() => {
-        // O ouvinte onMessage do Firebase DEVE salvar o ID da corrida no estado dadosNovaCorrida
-        setDadosNovaCorrida({
-          id: newestOrder.id,
-          endereco: newestOrder.dropoff.address || 'Endereço não informado',
-          valor: displayEarning.toFixed(2),
-          distancia: newestOrder.distance.toFixed(1) + 'km',
-          valorPorKm: (displayEarning / (newestOrder.distance || 1)).toFixed(2),
-          paradas: '1 parada',
-          nomeLoja: newestOrder.pickup.address?.split(',')[0] || 'Estabelecimento',
-          enderecoColeta: newestOrder.pickup.address || 'Endereço de coleta...',
-          tipoEntrega: 'Nuvem',
-          metodoPagamento: 'Carteira de créditos'
-        });
-        setIsModalOpen(true);
-      }, 1500);
-      
-      lastAvailableCount.current = cityOrders.length;
-      return () => clearTimeout(timeoutId);
-    }
     lastAvailableCount.current = cityOrders.length;
-  }, [cityOrders, isOnline, profile.id, onUpdateStatus]);
+  }, [cityOrders]);
 
   useEffect(() => {
     let watchId: number;
