@@ -220,6 +220,22 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       const corridaData = payload.data || {};
       const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
       
+      // Forçar a notificação no sistema operacional (Foreground)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.showNotification(
+            payload.notification?.title || payload.data?.titulo || "🛵 Nova Corrida!", 
+            {
+              body: payload.notification?.body || payload.data?.detalhes || "Deslize para baixo e toque aqui.",
+              icon: "/favicon.ico", // Ícone obrigatório para a barra de status
+              badge: "/favicon.ico",
+              requireInteraction: true,
+              vibrate: [1000, 500, 1000]
+            } as any
+          );
+        });
+      }
+      
       const timeoutId = setTimeout(() => {
         // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
         const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
