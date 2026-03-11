@@ -126,7 +126,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
     
     update();
-    const intervalId = setInterval(update, 10000); // update every 10 seconds
+    const intervalId = setInterval(update, 5000); // update every 5 seconds
     return () => clearInterval(intervalId);
   }, [lastSyncTime]);
 
