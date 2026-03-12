@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
 
 const CLOUD_ORDER_LIMIT = 100;
 
-async function executeSql(query: string, params: any[] = [], retries = 3): Promise<any[]> {
+async function executeSql(query: string, params: any[] = [], retries = 5): Promise<any[]> {
   if (!databaseUrl) return [];
   
   for (let i = 0; i < retries; i++) {
@@ -30,13 +30,18 @@ async function executeSql(query: string, params: any[] = [], retries = 3): Promi
       const result = await sql(query, params);
       return result as any[];
     } catch (error: any) {
-      const isNetworkError = error.message.includes('Failed to fetch') || error.message.includes('Load failed');
-      if (isNetworkError && i < retries - 1) {
-        console.warn(`Database attempt ${i + 1} failed, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+      const errorMessage = error.message || "";
+      const isNetworkError = errorMessage.includes('Failed to fetch') || errorMessage.includes('Load failed');
+      const isDeadlock = errorMessage.includes('deadlock detected');
+      
+      if ((isNetworkError || isDeadlock) && i < retries - 1) {
+        // Para deadlocks, usamos um delay aleatório (jitter) para evitar que as transações colidam novamente
+        const delay = isDeadlock ? (500 + Math.random() * 1000) * (i + 1) : 1000 * (i + 1);
+        console.warn(`Database attempt ${i + 1} failed (${isDeadlock ? 'deadlock' : 'network'}), retrying in ${Math.round(delay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      console.error("Erro na Database (Neon):", error.message);
+      console.error("Erro na Database (Neon):", errorMessage);
       throw error;
     }
   }
@@ -169,11 +174,14 @@ export const dbService = {
     await idb.set('drivers', drivers);
     try {
       if (drivers.length > 0) {
+        // ORDENAÇÃO CRÍTICA: Ordenar por ID para evitar deadlocks em updates concorrentes
+        const sortedDrivers = [...drivers].sort((a, b) => a.id.localeCompare(b.id));
+        
         let query = 'INSERT INTO drivers (id, data) VALUES ';
         const params: any[] = [];
-        drivers.forEach((d, i) => {
+        sortedDrivers.forEach((d, i) => {
           const cloudPayload = prepareForCloud(d, 'driver');
-          query += `($${i * 2 + 1}, $${i * 2 + 2})${i === drivers.length - 1 ? '' : ', '}`;
+          query += `($${i * 2 + 1}, $${i * 2 + 2})${i === sortedDrivers.length - 1 ? '' : ', '}`;
           params.push(d.id, cloudPayload);
         });
         query += ' ON CONFLICT (id) DO UPDATE SET data = drivers.data || EXCLUDED.data';
@@ -228,11 +236,14 @@ export const dbService = {
     await idb.set('stores', stores);
     try {
       if (stores.length > 0) {
+        // ORDENAÇÃO CRÍTICA: Ordenar por ID para evitar deadlocks
+        const sortedStores = [...stores].sort((a, b) => a.id.localeCompare(b.id));
+        
         let query = 'INSERT INTO stores (id, data) VALUES ';
         const params: any[] = [];
-        stores.forEach((s, i) => {
+        sortedStores.forEach((s, i) => {
           const cloudPayload = prepareForCloud(s, 'store');
-          query += `($${i * 2 + 1}, $${i * 2 + 2})${i === stores.length - 1 ? '' : ', '}`;
+          query += `($${i * 2 + 1}, $${i * 2 + 2})${i === sortedStores.length - 1 ? '' : ', '}`;
           params.push(s.id, cloudPayload);
         });
         query += ' ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data';
@@ -269,12 +280,15 @@ export const dbService = {
     try {
       const recentOrders = orders.sort((a,b) => b.timestamp - a.timestamp).slice(0, 20); // Sincroniza apenas os 20 mais recentes para performance
       if (recentOrders.length > 0) {
+        // ORDENAÇÃO CRÍTICA: Ordenar por ID para evitar deadlocks
+        const sortedOrders = [...recentOrders].sort((a, b) => a.id.localeCompare(b.id));
+        
         // Construção de query em lote (Batch Insert)
         let query = 'INSERT INTO orders (id, data, timestamp) VALUES ';
         const params: any[] = [];
-        recentOrders.forEach((o, i) => {
+        sortedOrders.forEach((o, i) => {
           const cloudPayload = prepareForCloud(o, 'order');
-          query += `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})${i === recentOrders.length - 1 ? '' : ', '}`;
+          query += `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})${i === sortedOrders.length - 1 ? '' : ', '}`;
           params.push(o.id, cloudPayload, o.timestamp);
         });
         query += ' ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, timestamp = EXCLUDED.timestamp';
@@ -289,7 +303,9 @@ export const dbService = {
 
   updateOrders: async (ordersToUpdate: Order[]) => {
     try {
-      for (const o of ordersToUpdate) {
+      // Ordenar para evitar deadlocks se múltiplos updates ocorrerem simultaneamente
+      const sorted = [...ordersToUpdate].sort((a, b) => a.id.localeCompare(b.id));
+      for (const o of sorted) {
         const cloudPayload = prepareForCloud(o, 'order');
         await executeSql(`
           INSERT INTO orders (id, data, timestamp) VALUES ($1, $2, $3) 
@@ -344,7 +360,8 @@ export const dbService = {
   saveRecharges: async (data: RechargeRequest[]) => {
     await idb.set('recharges', data);
     try {
-      for (const r of data) {
+      const sorted = [...data].sort((a, b) => a.id.localeCompare(b.id));
+      for (const r of sorted) {
         await executeSql(`INSERT INTO recharges (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2`, [r.id, r]);
       }
     } catch(e) {}
@@ -363,7 +380,8 @@ export const dbService = {
   saveWithdrawals: async (data: WithdrawalRequest[]) => {
     await idb.set('withdrawals', data);
     try {
-      for (const w of data) {
+      const sorted = [...data].sort((a, b) => a.id.localeCompare(b.id));
+      for (const w of sorted) {
         await executeSql(`INSERT INTO withdrawals (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2`, [w.id, w]);
       }
     } catch(e) {}
