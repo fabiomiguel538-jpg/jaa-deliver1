@@ -14,18 +14,20 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
+// Fica à escuta das mensagens quando a app está fechada/minimizada
 messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Mensagem recebida em segundo plano: ', payload);
+  console.log('Mensagem recebida em segundo plano: ', payload);
+  
+  // Puxa as informações que o seu servidor enviou (Valor, Endereço, etc.)
+  const titulo = payload.data?.titulo || payload.notification?.title || '🛵 Nova Corrida Disponível!';
+  const detalhes = payload.data?.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
 
-  const notificationTitle = payload.notification?.title || payload.data?.titulo || '🛵 Nova Corrida!';
   const notificationOptions = {
-    body: payload.notification?.body || payload.data?.detalhes || 'Toque para abrir o Pede Já.',
-    icon: 'https://i.postimg.cc/P5tM32f8/pedeja-logo.png',
-    badge: 'https://i.postimg.cc/P5tM32f8/pedeja-logo.png',
-    requireInteraction: true, // Mantém a notificação presa na tela
-    vibrate: [1000, 500, 1000, 500, 2000],
-    data: payload.data // Passa os dados para quando o app for aberto
+    body: detalhes,
+    requireInteraction: true, // Mantém a notificação presa no ecrã
+    vibrate: [1000, 500, 1000, 500, 2000, 500, 1000, 500, 2000], // Vibração máxima
+    data: payload.data // Guarda os dados para quando o motoboy clicar
   };
 
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  return self.registration.showNotification(titulo, notificationOptions);
 });
