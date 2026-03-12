@@ -57,6 +57,8 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing
 }) => {
   const isOnline = profile?.isOnline || false;
+  const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied' | 'error' | 'loading'>('loading');
+  const [fcmToken, setFcmToken] = useState<string | null>(profile.fcmToken || null);
   const isRouteActive = activeOrders.length > 0;
   const isMultiRoute = activeOrders.length > 1;
   const commonStatus = activeOrders[0]?.status || OrderStatus.SEARCHING;
@@ -196,9 +198,19 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     onToggleOnline(profile.id, nextStatus);
   };
 
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationStatus(Notification.permission as any);
+    } else {
+      setNotificationStatus('error');
+    }
+  }, []);
+
   const requestNotificationPermission = async () => {
+    setNotificationStatus('loading');
     try {
       const permission = await Notification.requestPermission();
+      setNotificationStatus(permission as any);
       console.log('Permissão de notificação:', permission);
       
       if (permission === 'granted') {
@@ -207,23 +219,30 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         if ('serviceWorker' in navigator) {
           registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
           console.log('Firebase Service Worker registrado com sucesso');
+          
+          // Aguarda o service worker ficar ativo
+          await navigator.serviceWorker.ready;
         }
 
         // Use o VAPID Key correto do seu projeto Firebase
+        // Se as notificações não estiverem aparecendo, verifique se esta chave é a mesma do seu console Firebase (Configurações do Projeto > Cloud Messaging > Certificados Web Push)
         const token = await getToken(messaging, { 
           vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc',
           serviceWorkerRegistration: registration
         });
         
         if (token) {
-          console.log("FCM Token:", token);
+          console.log("FCM Token gerado:", token);
+          setFcmToken(token);
           onUpdateProfile(profile.id, { fcmToken: token });
         } else {
-          console.log("Nenhum token de registro disponível.");
+          console.warn("Nenhum token FCM gerado.");
+          setNotificationStatus('error');
         }
       }
     } catch (error) {
-      console.error("Erro ao obter token:", error);
+      console.error('Erro ao solicitar permissão/token:', error);
+      setNotificationStatus('error');
     }
   };
 
@@ -904,7 +923,54 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Saque</label><input type="text" placeholder="CPF, e-mail, celular..." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
                         <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-[10px] font-black uppercase jaa-gradient text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">{isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '🎯 Sincronizar pelo GPS'}</button>
                         
+                        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
+                                notificationStatus === 'granted' ? 'bg-green-50 text-green-600' : 
+                                notificationStatus === 'denied' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
+                              }`}>
+                                {notificationStatus === 'granted' ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-gray-900">Status de Notificações</h4>
+                                <p className="text-[10px] text-gray-500">
+                                  {notificationStatus === 'granted' ? 'Configurado corretamente' : 
+                                   notificationStatus === 'denied' ? 'Bloqueado no navegador' : 'Aguardando permissão'}
+                                </p>
+                              </div>
+                            </div>
+                            {notificationStatus !== 'granted' && (
+                              <button 
+                                onClick={requestNotificationPermission}
+                                type="button"
+                                className="px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm"
+                              >
+                                ATIVAR
+                              </button>
+                            )}
+                          </div>
+
+                          {notificationStatus === 'granted' && (
+                            <div className="pt-2 border-t border-gray-50">
+                              <p className="text-[9px] text-gray-400 break-all font-mono">
+                                Token: {fcmToken ? `${fcmToken.substring(0, 20)}...` : 'Não gerado'}
+                              </p>
+                              {!fcmToken && (
+                                <button 
+                                  onClick={requestNotificationPermission}
+                                  type="button"
+                                  className="mt-2 text-[10px] text-orange-600 font-bold underline"
+                                >
+                                  Gerar novo token
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
                         <button 
+                          type="button"
                           onClick={() => {
                             alertSound.currentTime = 0;
                             alertSound.play().catch(e => alert('Erro ao tocar som: ' + e.message));

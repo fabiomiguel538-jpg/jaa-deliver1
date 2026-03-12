@@ -423,6 +423,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     // Disparar notificação para o motoboy via Netlify Function
     if (preAssignedDriverId) {
       const driver = onlineDrivers.find(d => d.id === preAssignedDriverId);
+      console.log(`Tentando notificar motorista pré-atribuído: ${preAssignedDriverId}. Encontrado: ${!!driver}, Tem Token: ${!!driver?.fcmToken}`);
       if (driver && driver.fcmToken) {
         fetch('/api/dispararNotificacao', {
           method: 'POST',
@@ -431,11 +432,15 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
             tokenFCM: driver.fcmToken,
             dadosDoPedido: newOrder
           })
-        }).catch(err => console.error('Erro ao disparar notificação:', err));
+        })
+        .then(res => res.json())
+        .then(data => console.log('Resposta da notificação:', data))
+        .catch(err => console.error('Erro ao disparar notificação:', err));
       }
     } else {
       // Se não tem motoboy pré-atribuído, notifica todos os motoboys online da cidade
       const cityDrivers = onlineDrivers.filter(d => (d.city || "").toLowerCase().trim() === (profile.city || "").toLowerCase().trim());
+      console.log(`Notificando ${cityDrivers.length} motoristas na cidade ${profile.city}`);
       cityDrivers.forEach(driver => {
         if (driver.fcmToken) {
           fetch('/api/dispararNotificacao', {
@@ -445,7 +450,10 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
               tokenFCM: driver.fcmToken,
               dadosDoPedido: newOrder
             })
-          }).catch(err => console.error('Erro ao disparar notificação:', err));
+          })
+          .then(res => res.json())
+          .then(data => console.log(`Resposta da notificação para ${driver.id}:`, data))
+          .catch(err => console.error('Erro ao disparar notificação:', err));
         }
       });
     }
