@@ -5,7 +5,6 @@ import MapView from './MapView';
 import { APP_LOGO } from '../constants';
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
-import OneSignal from 'react-onesignal';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC0jC_pMntiAj_XepIXauLsYh8vojOX-Mo",
@@ -190,105 +189,45 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     onToggleOnline(profile.id, nextStatus);
   };
 
-  // Função Stub para salvar tokens no Banco Neon
-  const salvarTokensNoBancoNeon = async (fcmToken: string | null, oneSignalPlayerId: string | null) => {
-    console.log("Sincronizando tokens com Banco Neon:", { fcmToken, oneSignalPlayerId });
-    // Aqui chamamos o onUpdateProfile para persistir no nosso dbService/localStorage
-    onUpdateProfile(profile.id, { 
-      fcmToken: fcmToken || profile.fcmToken, 
-      oneSignalId: oneSignalPlayerId || profile.oneSignalId 
-    });
-  };
-
   const requestNotificationPermission = async () => {
     try {
-      // 1. Firebase FCM
       const permission = await Notification.requestPermission();
-      let fcmToken = null;
       if (permission === 'granted') {
-        fcmToken = await getToken(messaging, { vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc' });
-      }
-
-      // 2. OneSignal
-      let oneSignalId = null;
-      try {
-        await OneSignal.Notifications.requestPermission();
-        oneSignalId = await OneSignal.User.PushSubscription.id;
-      } catch (e) {
-        console.log("Erro ao obter OneSignal ID:", e);
-      }
-
-      // 3. Salvar ambos
-      if (fcmToken || oneSignalId) {
-        await salvarTokensNoBancoNeon(fcmToken, oneSignalId);
+        const token = await getToken(messaging, { vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc' });
+        if (token) {
+          console.log("FCM Token:", token);
+          onUpdateProfile(profile.id, { fcmToken: token });
+        } else {
+          console.log("Nenhum token de registro disponível.");
+        }
       }
     } catch (error) {
-      console.error("Erro ao obter tokens:", error);
+      console.error("Erro ao obter token:", error);
     }
-  };
-
-  // Função unificada para disparar o Modal de Nova Corrida
-  const dispararModalNovaCorrida = (data: any) => {
-    console.log("Disparando Modal Unificado:", data);
-    alertSound.play().catch(e => console.log(e));
-    if ("vibrate" in navigator) {
-      navigator.vibrate([1000, 500, 1000, 500, 2000]);
-    }
-
-    // Pequeno delay para garantir que o som comece antes do modal travar a UI em alguns browsers
-    setTimeout(() => {
-      const idCapturado = data.id || data.orderId || data.corrida_id || data.corridaId;
-      
-      setDadosNovaCorrida({
-        id: idCapturado || '',
-        endereco: data.endereco || data.detalhes || 'Nova entrega disponível',
-        valor: data.valor || '---',
-        distancia: data.distancia_km || data.distancia || '---',
-        valorPorKm: data.valorPorKm || '---',
-        paradas: data.paradas || '1 parada',
-        nomeLoja: data.nomeLoja || 'Estabelecimento',
-        enderecoColeta: data.enderecoColeta || 'Endereço de coleta...',
-        tipoEntrega: data.tipoEntrega || 'Nuvem',
-        metodoPagamento: data.metodoPagamento || 'Carteira de créditos'
-      });
-      setIsModalOpen(true);
-    }, 1000);
   };
 
   useEffect(() => {
-    // Inicialização do OneSignal
-    OneSignal.init({
-      appId: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
-      allowLocalhostAsSecureOrigin: true,
-    }).then(() => {
-      console.log("OneSignal Inicializado");
-      
-      // Listener do OneSignal (Foreground)
-      OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event) => {
-        console.log("OneSignal: Notificação em foreground recebida", event);
-        const notification = event.notification;
-        const additionalData = notification.additionalData;
-        
-        if (additionalData) {
-          dispararModalNovaCorrida(additionalData);
-        }
-      });
-      
+    requestNotificationPermission();
 
-    });
-
-    // Firebase FCM Listener
     const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Firebase: Mensagem recebida com o app aberto: ', payload);
+      console.log('Mensagem recebida com o app aberto: ', payload);
+      alertSound.play().catch(e => console.log(e));
+      if ("vibrate" in navigator) {
+        navigator.vibrate([1000, 500, 1000, 500, 2000]);
+      }
       
-      // Forçar a notificação no sistema operacional (Foreground) para Firebase
+      // Extrair os detalhes da corrida diretamente do payload.data
+      const corridaData = payload.data || {};
+      const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
+      
+      // Forçar a notificação no sistema operacional (Foreground)
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((registration) => {
           registration.showNotification(
             payload.notification?.title || payload.data?.titulo || "🛵 Nova Corrida!", 
             {
               body: payload.notification?.body || payload.data?.detalhes || "Deslize para baixo e toque aqui.",
-              icon: "/favicon.ico",
+              icon: "/favicon.ico", // Ícone obrigatório para a barra de status
               badge: "/favicon.ico",
               requireInteraction: true,
               vibrate: [1000, 500, 1000]
@@ -296,13 +235,26 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           );
         });
       }
-
-      if (payload.data) {
-        dispararModalNovaCorrida(payload.data);
-      }
+      
+      const timeoutId = setTimeout(() => {
+        // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
+        const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
+        
+        setDadosNovaCorrida({
+          id: idCapturado || '',
+          endereco: corridaData.endereco || detalhes,
+          valor: corridaData.valor || '---',
+          distancia: corridaData.distancia_km || corridaData.distancia || '---',
+          valorPorKm: corridaData.valorPorKm || '---',
+          paradas: corridaData.paradas || '1 parada',
+          nomeLoja: corridaData.nomeLoja || 'Estabelecimento',
+          enderecoColeta: corridaData.enderecoColeta || 'Endereço de coleta...',
+          tipoEntrega: corridaData.tipoEntrega || 'Nuvem',
+          metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
+        });
+        setIsModalOpen(true);
+      }, 1500);
     });
-
-    requestNotificationPermission();
 
     return () => {
       unsubscribe();
