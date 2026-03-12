@@ -263,23 +263,42 @@ const App: React.FC = () => {
   };
   
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus, driverId?: string) => {
-    // 1. ATUALIZAÇÃO OTIMISTA IMEDIATA (Feedback Visual Instantâneo)
-    const previousOrders = [...globalOrders];
-    let orderToUpdate = globalOrders.find(o => o.id === orderId);
+    // 1. SINCRONIA COM NOTIFICAÇÕES: Se o pedido não está no estado local, busca no banco (comum em notificações rápidas)
+    let currentOrders = [...globalOrders];
+    let orderToUpdate = currentOrders.find(o => o.id === orderId);
+    let fetchedLatest = false;
     
-    if (!orderToUpdate) return;
-
-    const orderGroupIds = new Set<string>([orderId]);
-    if (status !== OrderStatus.DELIVERED) {
-      if (orderToUpdate.linkedToOrderId) {
-        orderGroupIds.add(orderToUpdate.linkedToOrderId);
-        globalOrders.forEach(o => { if (o.linkedToOrderId === orderToUpdate!.linkedToOrderId) orderGroupIds.add(o.id); });
-      } else {
-        globalOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
+    if (!orderToUpdate) {
+      try {
+        const latest = await dbService.getOrders();
+        orderToUpdate = latest.find(o => o.id === orderId);
+        if (orderToUpdate) {
+          currentOrders = latest;
+          fetchedLatest = true;
+        }
+      } catch (e) {
+        console.error("Erro ao buscar pedido faltante para atualização:", e);
       }
     }
 
-    const optimisticOrders = globalOrders.map(o => 
+    if (!orderToUpdate) {
+      console.warn(`Pedido ${orderId} não encontrado para atualização.`);
+      return;
+    }
+
+    const previousOrders = [...globalOrders];
+    const orderGroupIds = new Set<string>([orderId]);
+    
+    if (status !== OrderStatus.DELIVERED) {
+      if (orderToUpdate.linkedToOrderId) {
+        orderGroupIds.add(orderToUpdate.linkedToOrderId);
+        currentOrders.forEach(o => { if (o.linkedToOrderId === orderToUpdate!.linkedToOrderId) orderGroupIds.add(o.id); });
+      } else {
+        currentOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
+      }
+    }
+
+    const optimisticOrders = currentOrders.map(o => 
       orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o
     );
 
@@ -290,13 +309,26 @@ const App: React.FC = () => {
     try {
       // 2. VALIDAÇÃO DE ACEITE (Somente se for ACCEPTED)
       if (status === OrderStatus.ACCEPTED) {
-        const latestOrders = await dbService.getOrders();
-        const latestOrder = latestOrders.find(o => o.id === orderId);
+        let latestOrder = orderToUpdate;
         
-        if (!latestOrder || latestOrder.status !== OrderStatus.SEARCHING) {
-          alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
-          setGlobalOrders(latestOrders);
-          return;
+        // Se não buscamos agora há pouco, precisamos buscar para validar o aceite concorrente
+        if (!fetchedLatest) {
+          const latestOrders = await dbService.getOrders();
+          const freshOrder = latestOrders.find(o => o.id === orderId);
+          
+          if (!freshOrder || freshOrder.status !== OrderStatus.SEARCHING) {
+            alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
+            setGlobalOrders(latestOrders);
+            return;
+          }
+          latestOrder = freshOrder;
+        } else {
+          // Se já buscamos e o status não era SEARCHING, reverte
+          if (orderToUpdate.status !== OrderStatus.SEARCHING) {
+            alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
+            setGlobalOrders(currentOrders);
+            return;
+          }
         }
       }
 

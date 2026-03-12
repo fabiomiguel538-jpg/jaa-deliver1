@@ -138,23 +138,17 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
 
     setIsAccepting(true);
-    try {
-      // Faz a requisição direta para a API/Banco de dados para atribuir a corrida ao motoboy,
-      // ignorando se a corrida já renderizou na lista da tela ou não.
-      await onUpdateStatus(corridaId, OrderStatus.ACCEPTED, profile.id);
-      
-      // Apenas quando a requisição retornar SUCESSO, feche o Modal
-      setIsModalOpen(false);
-      setDadosNovaCorrida(null);
-      
-      alertSound.pause();
-      alertSound.currentTime = 0;
-    } catch (error) {
-      console.error("Erro ao aceitar corrida direto do modal:", error);
-      alert(`Erro ao aceitar a corrida: ${error}`);
-    } finally {
-      setIsAccepting(false);
-    }
+    
+    // Dispara a atualização em segundo plano para ser "simultâneo" na visão do usuário
+    onUpdateStatus(corridaId, OrderStatus.ACCEPTED, profile.id)
+      .catch(err => console.error("Erro ao aceitar corrida direto do modal:", err))
+      .finally(() => setIsAccepting(false));
+    
+    // Fecha o modal imediatamente para feedback instantâneo
+    setIsModalOpen(false);
+    setDadosNovaCorrida(null);
+    alertSound.pause();
+    alertSound.currentTime = 0;
   };
 
   const fecharModal = () => {
