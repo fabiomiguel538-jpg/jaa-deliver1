@@ -192,8 +192,22 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const requestNotificationPermission = async () => {
     try {
       const permission = await Notification.requestPermission();
+      console.log('Permissão de notificação:', permission);
+      
       if (permission === 'granted') {
-        const token = await getToken(messaging, { vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc' });
+        // Registrar explicitamente o service worker do Firebase para garantir que as notificações funcionem
+        let registration;
+        if ('serviceWorker' in navigator) {
+          registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          console.log('Firebase Service Worker registrado com sucesso');
+        }
+
+        // Use o VAPID Key correto do seu projeto Firebase
+        const token = await getToken(messaging, { 
+          vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc',
+          serviceWorkerRegistration: registration
+        });
+        
         if (token) {
           console.log("FCM Token:", token);
           onUpdateProfile(profile.id, { fcmToken: token });
@@ -211,7 +225,11 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('Mensagem recebida com o app aberto: ', payload);
-      alertSound.play().catch(e => console.log(e));
+      
+      // Tenta tocar o som
+      alertSound.play().catch(e => console.log('Erro ao tocar som:', e));
+
+      // Tenta vibrar o telemóvel
       if ("vibrate" in navigator) {
         navigator.vibrate([1000, 500, 1000, 500, 2000]);
       }
@@ -236,24 +254,24 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         });
       }
       
-      const timeoutId = setTimeout(() => {
-        // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
-        const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
-        
-        setDadosNovaCorrida({
-          id: idCapturado || '',
-          endereco: corridaData.endereco || detalhes,
-          valor: corridaData.valor || '---',
-          distancia: corridaData.distancia_km || corridaData.distancia || '---',
-          valorPorKm: corridaData.valorPorKm || '---',
-          paradas: corridaData.paradas || '1 parada',
-          nomeLoja: corridaData.nomeLoja || 'Estabelecimento',
-          enderecoColeta: corridaData.enderecoColeta || 'Endereço de coleta...',
-          tipoEntrega: corridaData.tipoEntrega || 'Nuvem',
-          metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
-        });
-        setIsModalOpen(true);
-      }, 1500);
+      // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
+      const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
+      
+      // Reseta o cronômetro e abre o modal imediatamente para ser "elegante" e rápido
+      setTimeLeft(30);
+      setDadosNovaCorrida({
+        id: idCapturado || '',
+        endereco: corridaData.endereco || detalhes,
+        valor: corridaData.valor || '---',
+        distancia: corridaData.distancia_km || corridaData.distancia || '---',
+        valorPorKm: corridaData.valorPorKm || '---',
+        paradas: corridaData.paradas || '1 parada',
+        nomeLoja: corridaData.nomeLoja || 'Estabelecimento',
+        enderecoColeta: corridaData.enderecoColeta || 'Endereço de coleta...',
+        tipoEntrega: corridaData.tipoEntrega || 'Nuvem',
+        metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
+      });
+      setIsModalOpen(true);
     });
 
     return () => {
@@ -867,6 +885,30 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cidade Atuação</label><input type="text" value={tempProfile.city} onChange={e => setTempProfile(p => ({ ...p, city: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Saque</label><input type="text" placeholder="CPF, e-mail, celular..." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
                         <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-[10px] font-black uppercase jaa-gradient text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">{isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '🎯 Sincronizar pelo GPS'}</button>
+                        
+                        <button 
+                          onClick={() => {
+                            alertSound.play().catch(e => alert('Erro ao tocar som: ' + e.message));
+                            if ('vibrate' in navigator) navigator.vibrate(200);
+                            setDadosNovaCorrida({
+                              id: 'TESTE-123',
+                              endereco: 'Rua de Teste, 123 - Centro',
+                              valor: '15.50',
+                              distancia: '3.5 km',
+                              valorPorKm: '4.42',
+                              paradas: '1 parada',
+                              nomeLoja: 'Loja de Teste',
+                              enderecoColeta: 'Av. Principal, 500',
+                              tipoEntrega: 'Teste',
+                              metodoPagamento: 'Dinheiro'
+                            });
+                            setIsModalOpen(true);
+                          }} 
+                          className="w-full text-[10px] font-black uppercase bg-blue-50 text-blue-600 py-4 rounded-xl flex items-center justify-center gap-2 border border-blue-100 shadow-sm"
+                        >
+                          🔔 Testar Notificação Elegante
+                        </button>
+
                         <button onClick={saveProfile} className="w-full bg-gray-800 text-white font-black py-5 rounded-2xl text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">SALVAR ALTERAÇÕES</button>
                     </div>
                 </div>
