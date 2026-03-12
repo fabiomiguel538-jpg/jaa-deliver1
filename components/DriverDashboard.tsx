@@ -191,65 +191,53 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const requestNotificationPermission = async () => {
     try {
-      console.log("Solicitando permissão de notificação...");
       const permission = await Notification.requestPermission();
-      console.log("Permissão de notificação:", permission);
       if (permission === 'granted') {
-        const token = await getToken(messaging, { 
-          vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc' 
-        });
+        const token = await getToken(messaging, { vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc' });
         if (token) {
-          console.log("FCM Token obtido:", token);
+          console.log("FCM Token:", token);
           onUpdateProfile(profile.id, { fcmToken: token });
         } else {
-          console.warn("Nenhum token de registro disponível.");
+          console.log("Nenhum token de registro disponível.");
         }
-      } else {
-        console.warn("Permissão de notificação negada pelo usuário.");
       }
     } catch (error) {
-      console.error("Erro ao obter token FCM:", error);
+      console.error("Erro ao obter token:", error);
     }
   };
 
   useEffect(() => {
-    if (isOnline) {
-      requestNotificationPermission();
-    }
+    requestNotificationPermission();
 
     const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Mensagem FCM recebida (Foreground):', payload);
-      
-      // Tenta tocar o som de alerta
-      alertSound.play().catch(e => console.error("Erro ao tocar som:", e));
-      
-      // Vibração robusta
+      console.log('Mensagem recebida com o app aberto: ', payload);
+      alertSound.play().catch(e => console.log(e));
       if ("vibrate" in navigator) {
-        navigator.vibrate([1000, 500, 1000, 500, 1000, 500, 2000]);
+        navigator.vibrate([1000, 500, 1000, 500, 2000]);
       }
       
-      // Extrair os detalhes da corrida
+      // Extrair os detalhes da corrida diretamente do payload.data
       const corridaData = payload.data || {};
-      const titulo = payload.notification?.title || corridaData.titulo || "🛵 Nova Corrida!";
-      const detalhes = payload.notification?.body || corridaData.detalhes || 'Toque para ver os detalhes da entrega.';
+      const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
       
-      // Forçar a notificação no sistema operacional (Status Bar)
+      // Forçar a notificação no sistema operacional (Foreground)
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((registration) => {
-          registration.showNotification(titulo, {
-            body: detalhes,
-            icon: "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
-            badge: "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
-            requireInteraction: true,
-            vibrate: [1000, 500, 1000, 500, 2000],
-            tag: 'nova-corrida-' + Date.now(),
-            renotify: true
-          } as any);
+          registration.showNotification(
+            payload.notification?.title || payload.data?.titulo || "🛵 Nova Corrida!", 
+            {
+              body: payload.notification?.body || payload.data?.detalhes || "Deslize para baixo e toque aqui.",
+              icon: "/favicon.ico", // Ícone obrigatório para a barra de status
+              badge: "/favicon.ico",
+              requireInteraction: true,
+              vibrate: [1000, 500, 1000]
+            } as any
+          );
         });
       }
       
-      // Abre o modal interno com um pequeno delay para a notificação aparecer primeiro
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
+        // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
         const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
         
         setDadosNovaCorrida({
@@ -265,13 +253,13 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
         });
         setIsModalOpen(true);
-      }, 1000);
+      }, 1500);
     });
 
     return () => {
       unsubscribe();
     };
-  }, [isOnline, messaging, profile.id]);
+  }, []);
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
   useEffect(() => {

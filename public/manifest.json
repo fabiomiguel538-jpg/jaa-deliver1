@@ -5,7 +5,6 @@
   "description": "Logística Inteligente e Entregas Rápidas para Lojas e Motoboys",
   "start_url": "/",
   "display": "standalone",
-  "gcm_sender_id": "103953800507",
   "background_color": "#ffffff",
   "theme_color": "#F84F39",
   "orientation": "portrait",

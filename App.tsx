@@ -252,92 +252,87 @@ const App: React.FC = () => {
   };
   
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus, driverId?: string) => {
-    // 1. Guardar o estado atual para possível rollback em caso de falha
-    const previousOrders = [...globalOrders];
-    
     setIsSyncing(true);
-    
-    // Identificar o pedido e o grupo de pedidos vinculados
-    const order = globalOrders.find(o => o.id === orderId);
-    if (!order) {
-      setIsSyncing(false);
-      return;
-    }
+    try {
+      let sourceOrders = globalOrders;
 
-    const orderGroupIds = new Set<string>([orderId]);
-    if (status !== OrderStatus.DELIVERED) {
-      if (order.linkedToOrderId) {
-        orderGroupIds.add(order.linkedToOrderId);
-        globalOrders.forEach(o => { if (o.linkedToOrderId === order.linkedToOrderId) orderGroupIds.add(o.id); });
-      } else {
-        globalOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
-      }
-    }
-
-    // 2. ATUALIZAÇÃO OTIMISTA (Optimistic UI)
-    // Atualizamos o estado local imediatamente para que a UI reflita a mudança na hora
-    const optimisticOrders = globalOrders.map(o => 
-      orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o
-    );
-    setGlobalOrders(optimisticOrders);
-
-    // 3. REQUISIÇÃO EM BACKGROUND (API / Banco de Dados)
-    // Usamos uma função assíncrona auto-executável para não bloquear a UI
-    (async () => {
-      try {
-        let sourceOrders = globalOrders;
-
-        // Se a ação for "ACEITAR" (ACCEPTED), fazemos uma verificação de concorrência no banco
-        if (status === OrderStatus.ACCEPTED) {
+      // Se a ação for "ACEITAR" (ACCEPTED), fazemos uma verificação atômica no banco
+      if (status === OrderStatus.ACCEPTED) {
+        try {
+          // Busca a versão mais recente dos pedidos no banco de dados
           const latestOrders = await dbService.getOrders();
           const latestOrder = latestOrders.find(o => o.id === orderId);
           
+          // Se o pedido não existir mais ou não estiver mais "SEARCHING" (Disponível)
           if (!latestOrder || latestOrder.status !== OrderStatus.SEARCHING) {
-            // ROLLBACK: Outro motoboy pegou a corrida
-            setGlobalOrders(latestOrders);
             alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
-            return;
+            // Atualiza o estado local para remover a corrida da tela
+            setGlobalOrders(latestOrders);
+            return; // Interrompe a execução, bloqueando a atualização
           }
+
+          // Usa a lista mais recente do banco, pois a notificação pode ter chegado antes do polling local
           sourceOrders = latestOrders;
+        } catch (error) {
+          console.error("Erro ao validar status do pedido:", error);
+          alert("Erro de conexão ao tentar aceitar a corrida. Tente novamente.");
+          return;
         }
+      }
 
-        // LÓGICA DE CRÉDITO FINANCEIRO ATÔMICA
-        if (status === OrderStatus.DELIVERED) {
-          let totalToCredit = 0;
-          let targetDriverId = driverId || order.driverId;
-          
-          if (targetDriverId) {
-            orderGroupIds.forEach(currentOrderId => {
-              const finishedOrder = sourceOrders.find(o => o.id === currentOrderId);
-              if (finishedOrder && finishedOrder.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
-                totalToCredit += (finishedOrder.driverEarning || 0);
-              }
-            });
+      const order = sourceOrders.find(o => o.id === orderId);
+      if (!order) {
+        console.error("Pedido não encontrado na base de dados:", orderId);
+        return;
+      }
+      
+      const orderGroupIds = new Set<string>([orderId]);
+      
+      // Regra de validação: Se o status for DELIVERED (Finalizar Entrega), 
+      // concluímos APENAS a corrida atual. Se for outro status (ex: IN_TRANSIT), 
+      // atualizamos toda a fila/array de pedidos vinculados.
+      if (status !== OrderStatus.DELIVERED) {
+        if (order.linkedToOrderId) {
+          orderGroupIds.add(order.linkedToOrderId);
+          sourceOrders.forEach(o => { if (o.linkedToOrderId === order.linkedToOrderId) orderGroupIds.add(o.id); });
+        } else {
+          sourceOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
+        }
+      }
 
-            if (totalToCredit > 0) {
-              const success = await dbService.adjustDriverBalance(targetDriverId, totalToCredit);
-              if (!success) throw new Error("Falha ao ajustar saldo");
+      // LÓGICA DE CRÉDITO FINANCEIRO ATÔMICA
+      if (status === OrderStatus.DELIVERED) {
+        let totalToCredit = 0;
+        let targetDriverId = driverId || order.driverId;
+        
+        if (targetDriverId) {
+          orderGroupIds.forEach(currentOrderId => {
+            const finishedOrder = sourceOrders.find(o => o.id === currentOrderId);
+            // Só credita se o pedido não estiver entregue AINDA e NÃO tiver taxa de retorno pendente
+            // (Se tiver taxa de retorno, o crédito ocorre via handleConfirmReturnRobust)
+            if (finishedOrder && finishedOrder.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
+              totalToCredit += (finishedOrder.driverEarning || 0);
+            }
+          });
+
+          if (totalToCredit > 0) {
+            const success = await dbService.adjustDriverBalance(targetDriverId, totalToCredit);
+            if (!success) {
+              alert("Erro ao processar saldo do motoboy. Tentaremos sincronizar novamente em instantes.");
             }
           }
         }
-
-        // Salva a alteração definitiva no banco
-        const finalOrders = sourceOrders.map(o => 
-          orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o
-        );
-        await dbService.saveOrders(finalOrders);
-        
-        // Sincroniza os dados finais (saldo, etc)
-        await loadAllData();
-      } catch (error) {
-        // 4. ROLLBACK EM CASO DE ERRO DE CONEXÃO
-        console.error("Erro na atualização em background:", error);
-        setGlobalOrders(previousOrders);
-        alert("Erro de conexão. A mudança de status não pôde ser salva. Tente novamente.");
-      } finally {
-        setIsSyncing(false);
       }
-    })();
+
+      const newOrders = sourceOrders.map(o => orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o);
+      await dbService.saveOrders(newOrders);
+      setGlobalOrders(newOrders);
+      
+      // Força refresh para garantir que todos vejam o saldo atualizado do banco
+      await loadAllData();
+    } finally {
+      setIsSyncing(false);
+    }
   };
   
   const handleCancelOrder = (orderId: string) => {
