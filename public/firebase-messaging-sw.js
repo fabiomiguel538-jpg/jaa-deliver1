@@ -24,14 +24,30 @@ messaging.onBackgroundMessage(function(payload) {
 
   const notificationOptions = {
     body: detalhes,
-    icon: "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
-    badge: "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
     requireInteraction: true, // Mantém a notificação presa no ecrã
     vibrate: [1000, 500, 1000, 500, 2000, 500, 1000, 500, 2000], // Vibração máxima
-    tag: 'nova-corrida-bg',
-    renotify: true,
     data: payload.data // Guarda os dados para quando o motoboy clicar
   };
 
   return self.registration.showNotification(titulo, notificationOptions);
+});
+
+// Lida com o clique na notificação
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+
+  // Tenta focar na janela da app se estiver aberta, ou abrir uma nova
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
+        if (client.url.includes('/') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });

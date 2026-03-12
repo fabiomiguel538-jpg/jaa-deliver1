@@ -48,8 +48,10 @@ const formatDateTime = (timestamp: number) => {
 };
 
 // 1. Pré-carregar o Áudio Globalmente (Garante que esteja baixado antes da corrida)
-const alertSound = new Audio('https://actions.google.com/sounds/v1/alarms/notification_high_pitch.ogg');
-alertSound.load(); // Força o carregamento antecipado
+// Usando um som mais padrão e garantindo fallback
+const alertSound = new Audio('https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.mp3');
+alertSound.load();
+alertSound.loop = true; // Faz o som repetir até o motoboy agir
 
 const DriverDashboard: React.FC<DriverDashboardProps> = ({ 
   onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing
@@ -185,6 +187,11 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const nextStatus = !isOnline;
     if (nextStatus) {
       await requestNotificationPermission();
+      // "Prime" o áudio para permitir autoplay posterior
+      alertSound.play().then(() => {
+        alertSound.pause();
+        alertSound.currentTime = 0;
+      }).catch(e => console.log('Erro ao primar áudio:', e));
     }
     onToggleOnline(profile.id, nextStatus);
   };
@@ -226,29 +233,40 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('Mensagem recebida com o app aberto: ', payload);
       
-      // Tenta tocar o som
-      alertSound.play().catch(e => console.log('Erro ao tocar som:', e));
+      // Tenta tocar o som (Força o play mesmo se houver restrição, tentando várias vezes se necessário)
+      const playSound = () => {
+        alertSound.currentTime = 0;
+        alertSound.play().catch(e => {
+          console.log('Autoplay bloqueado, aguardando interação ou tentando novamente:', e);
+          // Tenta novamente em 1 segundo caso o navegador libere
+          setTimeout(playSound, 1000);
+        });
+      };
+      playSound();
 
-      // Tenta vibrar o telemóvel
+      // Tenta vibrar o telemóvel com um padrão forte e repetitivo
       if ("vibrate" in navigator) {
-        navigator.vibrate([1000, 500, 1000, 500, 2000]);
+        navigator.vibrate([1000, 500, 1000, 500, 1000, 500, 2000]);
       }
       
       // Extrair os detalhes da corrida diretamente do payload.data
       const corridaData = payload.data || {};
       const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
       
-      // Forçar a notificação no sistema operacional (Foreground)
+      // Forçar a notificação no sistema operacional (Foreground) - APARECE NA BARRA DE STATUS
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((registration) => {
           registration.showNotification(
             payload.notification?.title || payload.data?.titulo || "🛵 Nova Corrida!", 
             {
               body: payload.notification?.body || payload.data?.detalhes || "Deslize para baixo e toque aqui.",
-              icon: "/favicon.ico", // Ícone obrigatório para a barra de status
+              icon: "/favicon.ico", 
               badge: "/favicon.ico",
+              tag: "nova-corrida", // Evita duplicatas mas garante que apareça
+              renotify: true,      // Faz o celular vibrar/tocar novamente se já houver uma
               requireInteraction: true,
-              vibrate: [1000, 500, 1000]
+              vibrate: [1000, 500, 1000, 500, 1000],
+              data: { url: window.location.origin }
             } as any
           );
         });
@@ -888,8 +906,25 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                         
                         <button 
                           onClick={() => {
+                            alertSound.currentTime = 0;
                             alertSound.play().catch(e => alert('Erro ao tocar som: ' + e.message));
-                            if ('vibrate' in navigator) navigator.vibrate(200);
+                            if ('vibrate' in navigator) navigator.vibrate([1000, 500, 1000]);
+                            
+                            // Simular notificação na barra de status
+                            if ('serviceWorker' in navigator) {
+                              navigator.serviceWorker.ready.then((registration) => {
+                                registration.showNotification("🛵 Teste de Nova Corrida!", {
+                                  body: "Rua de Teste, 123 - R$ 15,50",
+                                  icon: "/favicon.ico",
+                                  badge: "/favicon.ico",
+                                  tag: "teste-corrida",
+                                  renotify: true,
+                                  requireInteraction: true,
+                                  vibrate: [1000, 500, 1000]
+                                } as any);
+                              });
+                            }
+
                             setDadosNovaCorrida({
                               id: 'TESTE-123',
                               endereco: 'Rua de Teste, 123 - Centro',
