@@ -189,6 +189,7 @@ export const dbService = {
       }
     } catch(e) {
       console.error("Erro no batch sync de drivers:", e);
+      throw e;
     }
     syncChannel.postMessage({ type: 'UPDATE_DRIVERS' });
   },
@@ -251,6 +252,7 @@ export const dbService = {
       }
     } catch(e) {
       console.error("Erro no batch sync de lojas:", e);
+      throw e;
     }
     syncChannel.postMessage({ type: 'UPDATE_STORES' });
   },
@@ -296,6 +298,7 @@ export const dbService = {
       }
     } catch (e) {
       console.error("Erro no batch sync de pedidos:", e);
+      throw e; // Propaga o erro para que a UI possa reagir
     }
     
     syncChannel.postMessage({ type: 'UPDATE_ORDERS' });
@@ -314,6 +317,7 @@ export const dbService = {
       }
     } catch(e) {
       console.error("Erro ao atualizar pedidos na nuvem:", e);
+      throw e; // Propaga o erro para que a UI possa reagir
     }
     syncChannel.postMessage({ type: 'UPDATE_ORDERS' });
   },

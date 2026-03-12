@@ -78,6 +78,12 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Monitora mudança de status para liberar o botão de atualização
+  const currentStatus = activeOrders[0]?.status;
+  useEffect(() => {
+    setIsUpdating(false);
+  }, [currentStatus]);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isGpsLoading, setIsGpsLoading] = useState(false);
@@ -407,15 +413,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       else if (currentStatus === OrderStatus.PICKUP) nextStatus = OrderStatus.IN_TRANSIT;
       
       if (nextStatus) {
-        // Não esperamos o sync total para liberar o botão se a mudança for visualmente clara
-        onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
-        
-        // Pequeno delay para evitar double-tap acidental mas liberar rápido
-        setTimeout(() => setIsUpdating(false), 500);
+        // Aguardamos a conclusão da atualização no servidor
+        // O isUpdating será resetado pelo useEffect quando o status mudar nas props
+        await onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
       } else {
         setIsUpdating(false);
       }
     } catch (error) {
+      console.error('Erro ao atualizar status:', error);
       setIsUpdating(false);
     }
   };
@@ -441,9 +446,8 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           return next;
         });
       }
-      // Liberar após um curto período
-      setTimeout(() => setIsUpdating(false), 800);
     } catch (error) {
+      console.error('Erro ao finalizar entrega:', error);
       setIsUpdating(false);
     }
   };
@@ -825,7 +829,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                   <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-white border-4 border-[#0085FF] rounded-full flex-shrink-0 mt-1 shadow-sm"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Coleta</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.pickup.address}</p></div></div>
                                   <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-[#F84F39] border-4 border-white rounded-full flex-shrink-0 mt-1 shadow-lg"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Entrega</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.dropoff.address}</p></div></div>
                                 </div>
-                                <button disabled={isUpdating} onClick={async () => { if(isUpdating) return; setIsUpdating(true); try { await onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id); } finally { setIsUpdating(false); } }} className={`w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>ACEITAR ROTA AGORA 🛵</button>
+                                <button disabled={isUpdating} onClick={async () => { if(isUpdating) return; setIsUpdating(true); try { await onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id); } catch(e) { setIsUpdating(false); } }} className={`w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>ACEITAR ROTA AGORA 🛵</button>
                             </div>
                           );
                         })

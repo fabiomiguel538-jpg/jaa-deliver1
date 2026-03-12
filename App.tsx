@@ -32,7 +32,7 @@ const App: React.FC = () => {
   const [canInstall, setCanInstall] = useState(false);
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
 
-  const isInternalUpdate = useRef(false);
+  const lastInternalUpdate = useRef(0);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
@@ -85,6 +85,12 @@ const App: React.FC = () => {
   const loadAllData = useCallback(async () => {
     setIsSyncing(true);
     try {
+      // Bloqueia o carregamento se houve uma atualização interna muito recente (evita flicker/reversão)
+      if (Date.now() - lastInternalUpdate.current < 2000) {
+        setIsSyncing(false);
+        return;
+      }
+
       await dbService.init();
       const [d, s, o, r, w, settings] = await Promise.all([
         dbService.getDrivers(),
@@ -95,7 +101,12 @@ const App: React.FC = () => {
         dbService.getSettings()
       ]);
       
-      isInternalUpdate.current = true;
+      // Verificamos novamente o timestamp antes de aplicar para evitar race conditions
+      if (Date.now() - lastInternalUpdate.current < 2000) {
+        setIsSyncing(false);
+        return;
+      }
+
       setDrivers(d || []);
       setStores(s || []);
       setGlobalOrders(o || []);
@@ -108,7 +119,6 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Erro ao carregar dados do banco:", error);
     } finally {
-      isInternalUpdate.current = false; 
       setIsSyncing(false); 
       setIsLoading(false);
     }
@@ -168,7 +178,7 @@ const App: React.FC = () => {
     });
 
     const unsubscribe = dbService.subscribe(() => {
-      if (!isInternalUpdate.current) {
+      if (Date.now() - lastInternalUpdate.current > 2000) {
         loadAllData();
       }
     });
@@ -183,8 +193,8 @@ const App: React.FC = () => {
     
     const pollData = setInterval(() => {
       // A busca de dados ocorre em segundo plano se houver um usuário logado e não houver sincronização ativa
-      // Adicionado check de isInternalUpdate para evitar sobrescrever mudanças otimistas
-      if (role && !isSyncing && !isInternalUpdate.current) {
+      // Adicionado check de timestamp para evitar sobrescrever mudanças otimistas
+      if (role && !isSyncing && (Date.now() - lastInternalUpdate.current > 2000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);
@@ -274,7 +284,7 @@ const App: React.FC = () => {
     );
 
     // Aplica a mudança localmente primeiro
-    isInternalUpdate.current = true;
+    lastInternalUpdate.current = Date.now();
     setGlobalOrders(optimisticOrders);
 
     try {
@@ -326,7 +336,6 @@ const App: React.FC = () => {
       setGlobalOrders(previousOrders);
       alert("Erro ao sincronizar status. Tente novamente.");
     } finally {
-      isInternalUpdate.current = false;
       setIsSyncing(false);
     }
   };
@@ -361,7 +370,7 @@ const App: React.FC = () => {
 
   const handleResetStatistics = async () => {
     setIsSyncing(true);
-    isInternalUpdate.current = true; // Bloqueia syncs automáticos durante a limpeza profunda
+    lastInternalUpdate.current = Date.now(); // Bloqueia syncs automáticos durante a limpeza profunda
     try {
       // Executa as deleções no banco de dados e aguarda confirmação real
       await Promise.all([
@@ -380,7 +389,6 @@ const App: React.FC = () => {
       console.error("Erro ao zerar dados:", error);
       alert("Erro ao zerar dados no banco de dados. Tente novamente.");
     } finally {
-      isInternalUpdate.current = false;
       setIsSyncing(false);
       // Força um recarregamento para garantir que a UI reflita o estado vazio do banco
       loadAllData();
@@ -491,7 +499,7 @@ const App: React.FC = () => {
 
   const handleDeleteDriver = async (driverId: string) => {
     setIsSyncing(true);
-    isInternalUpdate.current = true;
+    lastInternalUpdate.current = Date.now();
     try {
       await dbService.deleteDriver(driverId);
       setDrivers(prev => {
@@ -504,7 +512,6 @@ const App: React.FC = () => {
       console.error("Erro ao excluir motoboy:", error);
       alert("Falha ao excluir no servidor. O registro não foi removido.");
     } finally {
-      isInternalUpdate.current = false;
       setIsSyncing(false);
       loadAllData();
     }
@@ -512,7 +519,7 @@ const App: React.FC = () => {
 
   const handleDeleteStore = async (storeId: string) => {
     setIsSyncing(true);
-    isInternalUpdate.current = true;
+    lastInternalUpdate.current = Date.now();
     try {
       await dbService.deleteStore(storeId);
       setStores(prev => {
@@ -525,7 +532,6 @@ const App: React.FC = () => {
       console.error("Erro ao excluir loja:", error);
       alert("Falha ao excluir no servidor. A loja não foi removida.");
     } finally {
-      isInternalUpdate.current = false;
       setIsSyncing(false);
       loadAllData();
     }
