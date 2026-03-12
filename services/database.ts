@@ -168,16 +168,20 @@ export const dbService = {
   saveDrivers: async (drivers: DriverProfile[]) => {
     await idb.set('drivers', drivers);
     try {
-      for (const d of drivers) {
-        const cloudPayload = prepareForCloud(d, 'driver');
-        // Usamos jsonb_set para garantir que se o registro já existir, apenas atualizamos o que foi enviado, 
-        // mas mantendo o 'balance' intacto se não estiver no payload (que removemos no prepareForCloud).
-        await executeSql(`
-          INSERT INTO drivers (id, data) VALUES ($1, $2) 
-          ON CONFLICT (id) DO UPDATE SET data = drivers.data || $2
-        `, [d.id, cloudPayload]);
+      if (drivers.length > 0) {
+        let query = 'INSERT INTO drivers (id, data) VALUES ';
+        const params: any[] = [];
+        drivers.forEach((d, i) => {
+          const cloudPayload = prepareForCloud(d, 'driver');
+          query += `($${i * 2 + 1}, $${i * 2 + 2})${i === drivers.length - 1 ? '' : ', '}`;
+          params.push(d.id, cloudPayload);
+        });
+        query += ' ON CONFLICT (id) DO UPDATE SET data = drivers.data || EXCLUDED.data';
+        await executeSql(query, params);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error("Erro no batch sync de drivers:", e);
+    }
     syncChannel.postMessage({ type: 'UPDATE_DRIVERS' });
   },
 
@@ -223,11 +227,20 @@ export const dbService = {
   saveStores: async (stores: StoreProfile[]) => {
     await idb.set('stores', stores);
     try {
-      for (const s of stores) {
-        const cloudPayload = prepareForCloud(s, 'store');
-        await executeSql(`INSERT INTO stores (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2`, [s.id, cloudPayload]);
+      if (stores.length > 0) {
+        let query = 'INSERT INTO stores (id, data) VALUES ';
+        const params: any[] = [];
+        stores.forEach((s, i) => {
+          const cloudPayload = prepareForCloud(s, 'store');
+          query += `($${i * 2 + 1}, $${i * 2 + 2})${i === stores.length - 1 ? '' : ', '}`;
+          params.push(s.id, cloudPayload);
+        });
+        query += ' ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data';
+        await executeSql(query, params);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error("Erro no batch sync de lojas:", e);
+    }
     syncChannel.postMessage({ type: 'UPDATE_STORES' });
   },
 
@@ -251,13 +264,41 @@ export const dbService = {
 
   saveOrders: async (orders: Order[]) => {
     await idb.set('orders', orders);
+    
+    // Sincronização em lote para a nuvem (muito mais rápido que loop individual)
     try {
-      const recentOrders = orders.sort((a,b) => b.timestamp - a.timestamp).slice(0, CLOUD_ORDER_LIMIT);
-      for (const o of recentOrders) {
-        const cloudPayload = prepareForCloud(o, 'order');
-        await executeSql(`INSERT INTO orders (id, data, timestamp) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = $2, timestamp = $3`, [o.id, cloudPayload, o.timestamp]);
+      const recentOrders = orders.sort((a,b) => b.timestamp - a.timestamp).slice(0, 20); // Sincroniza apenas os 20 mais recentes para performance
+      if (recentOrders.length > 0) {
+        // Construção de query em lote (Batch Insert)
+        let query = 'INSERT INTO orders (id, data, timestamp) VALUES ';
+        const params: any[] = [];
+        recentOrders.forEach((o, i) => {
+          const cloudPayload = prepareForCloud(o, 'order');
+          query += `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})${i === recentOrders.length - 1 ? '' : ', '}`;
+          params.push(o.id, cloudPayload, o.timestamp);
+        });
+        query += ' ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, timestamp = EXCLUDED.timestamp';
+        await executeSql(query, params);
       }
-    } catch(e) {}
+    } catch (e) {
+      console.error("Erro no batch sync de pedidos:", e);
+    }
+    
+    syncChannel.postMessage({ type: 'UPDATE_ORDERS' });
+  },
+
+  updateOrders: async (ordersToUpdate: Order[]) => {
+    try {
+      for (const o of ordersToUpdate) {
+        const cloudPayload = prepareForCloud(o, 'order');
+        await executeSql(`
+          INSERT INTO orders (id, data, timestamp) VALUES ($1, $2, $3) 
+          ON CONFLICT (id) DO UPDATE SET data = $2, timestamp = $3
+        `, [o.id, cloudPayload, o.timestamp]);
+      }
+    } catch(e) {
+      console.error("Erro ao atualizar pedidos na nuvem:", e);
+    }
     syncChannel.postMessage({ type: 'UPDATE_ORDERS' });
   },
 

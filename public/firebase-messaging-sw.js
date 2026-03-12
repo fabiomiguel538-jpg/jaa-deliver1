@@ -24,8 +24,12 @@ messaging.onBackgroundMessage(function(payload) {
 
   const notificationOptions = {
     body: detalhes,
+    icon: "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
+    badge: "https://i.postimg.cc/P5tM32f8/pedeja-logo.png",
     requireInteraction: true, // Mantém a notificação presa no ecrã
     vibrate: [1000, 500, 1000, 500, 2000, 500, 1000, 500, 2000], // Vibração máxima
+    tag: 'nova-corrida-bg',
+    renotify: true,
     data: payload.data // Guarda os dados para quando o motoboy clicar
   };
 

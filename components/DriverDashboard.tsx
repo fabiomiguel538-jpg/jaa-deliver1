@@ -340,38 +340,55 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const handleGlobalStatusUpdate = async () => {
     if (activeOrders.length === 0 || isUpdating) return;
+    
+    // Feedback tátil imediato
+    if ("vibrate" in navigator) navigator.vibrate(50);
+    
     setIsUpdating(true);
     try {
       const currentStatus = activeOrders[0].status;
       let nextStatus: OrderStatus | null = null;
       if (currentStatus === OrderStatus.ACCEPTED) nextStatus = OrderStatus.PICKUP;
       else if (currentStatus === OrderStatus.PICKUP) nextStatus = OrderStatus.IN_TRANSIT;
-      if (nextStatus) await onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
-    } finally {
+      
+      if (nextStatus) {
+        // Não esperamos o sync total para liberar o botão se a mudança for visualmente clara
+        onUpdateStatus(activeOrders[0].id, nextStatus, profile.id);
+        
+        // Pequeno delay para evitar double-tap acidental mas liberar rápido
+        setTimeout(() => setIsUpdating(false), 500);
+      } else {
+        setIsUpdating(false);
+      }
+    } catch (error) {
       setIsUpdating(false);
     }
   };
 
   const handleFinishDelivery = async (order: Order) => {
     if (isUpdating) return;
+    
+    const code = deliveryCodes[order.id];
+    if (order.requiresDeliveryCode && code?.trim() !== order.deliveryCode) {
+      alert("Código de entrega incorreto!");
+      return;
+    }
+
+    if ("vibrate" in navigator) navigator.vibrate(50);
     setIsUpdating(true);
+    
     try {
-      if (!order.requiresDeliveryCode) {
-          await onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
-      } else {
-          const code = deliveryCodes[order.id];
-          if (code?.trim() === order.deliveryCode) {
-              await onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
-              setDeliveryCodes(prev => {
-                const next = {...prev};
-                delete next[order.id];
-                return next;
-              });
-          } else {
-              alert("Código de entrega incorreto para este pedido!");
-          }
+      await onUpdateStatus(order.id, OrderStatus.DELIVERED, profile.id);
+      if (order.requiresDeliveryCode) {
+        setDeliveryCodes(prev => {
+          const next = {...prev};
+          delete next[order.id];
+          return next;
+        });
       }
-    } finally {
+      // Liberar após um curto período
+      setTimeout(() => setIsUpdating(false), 800);
+    } catch (error) {
       setIsUpdating(false);
     }
   };

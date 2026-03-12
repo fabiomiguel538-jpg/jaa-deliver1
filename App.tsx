@@ -183,7 +183,8 @@ const App: React.FC = () => {
     
     const pollData = setInterval(() => {
       // A busca de dados ocorre em segundo plano se houver um usuário logado e não houver sincronização ativa
-      if (role && !isSyncing) {
+      // Adicionado check de isInternalUpdate para evitar sobrescrever mudanças otimistas
+      if (role && !isSyncing && !isInternalUpdate.current) {
         loadAllData();
       }
     }, POLLING_INTERVAL);
@@ -252,85 +253,80 @@ const App: React.FC = () => {
   };
   
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus, driverId?: string) => {
-    setIsSyncing(true);
+    // 1. ATUALIZAÇÃO OTIMISTA IMEDIATA (Feedback Visual Instantâneo)
+    const previousOrders = [...globalOrders];
+    let orderToUpdate = globalOrders.find(o => o.id === orderId);
+    
+    if (!orderToUpdate) return;
+
+    const orderGroupIds = new Set<string>([orderId]);
+    if (status !== OrderStatus.DELIVERED) {
+      if (orderToUpdate.linkedToOrderId) {
+        orderGroupIds.add(orderToUpdate.linkedToOrderId);
+        globalOrders.forEach(o => { if (o.linkedToOrderId === orderToUpdate!.linkedToOrderId) orderGroupIds.add(o.id); });
+      } else {
+        globalOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
+      }
+    }
+
+    const optimisticOrders = globalOrders.map(o => 
+      orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o
+    );
+
+    // Aplica a mudança localmente primeiro
+    isInternalUpdate.current = true;
+    setGlobalOrders(optimisticOrders);
+
     try {
-      let sourceOrders = globalOrders;
-
-      // Se a ação for "ACEITAR" (ACCEPTED), fazemos uma verificação atômica no banco
+      // 2. VALIDAÇÃO DE ACEITE (Somente se for ACCEPTED)
       if (status === OrderStatus.ACCEPTED) {
-        try {
-          // Busca a versão mais recente dos pedidos no banco de dados
-          const latestOrders = await dbService.getOrders();
-          const latestOrder = latestOrders.find(o => o.id === orderId);
-          
-          // Se o pedido não existir mais ou não estiver mais "SEARCHING" (Disponível)
-          if (!latestOrder || latestOrder.status !== OrderStatus.SEARCHING) {
-            alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
-            // Atualiza o estado local para remover a corrida da tela
-            setGlobalOrders(latestOrders);
-            return; // Interrompe a execução, bloqueando a atualização
-          }
-
-          // Usa a lista mais recente do banco, pois a notificação pode ter chegado antes do polling local
-          sourceOrders = latestOrders;
-        } catch (error) {
-          console.error("Erro ao validar status do pedido:", error);
-          alert("Erro de conexão ao tentar aceitar a corrida. Tente novamente.");
+        const latestOrders = await dbService.getOrders();
+        const latestOrder = latestOrders.find(o => o.id === orderId);
+        
+        if (!latestOrder || latestOrder.status !== OrderStatus.SEARCHING) {
+          alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
+          setGlobalOrders(latestOrders);
           return;
         }
       }
 
-      const order = sourceOrders.find(o => o.id === orderId);
-      if (!order) {
-        console.error("Pedido não encontrado na base de dados:", orderId);
-        return;
-      }
-      
-      const orderGroupIds = new Set<string>([orderId]);
-      
-      // Regra de validação: Se o status for DELIVERED (Finalizar Entrega), 
-      // concluímos APENAS a corrida atual. Se for outro status (ex: IN_TRANSIT), 
-      // atualizamos toda a fila/array de pedidos vinculados.
-      if (status !== OrderStatus.DELIVERED) {
-        if (order.linkedToOrderId) {
-          orderGroupIds.add(order.linkedToOrderId);
-          sourceOrders.forEach(o => { if (o.linkedToOrderId === order.linkedToOrderId) orderGroupIds.add(o.id); });
-        } else {
-          sourceOrders.forEach(o => { if (o.linkedToOrderId === orderId) orderGroupIds.add(o.id); });
-        }
-      }
-
-      // LÓGICA DE CRÉDITO FINANCEIRO ATÔMICA
+      // 3. LÓGICA FINANCEIRA (Atômica no Banco)
       if (status === OrderStatus.DELIVERED) {
         let totalToCredit = 0;
-        let targetDriverId = driverId || order.driverId;
+        let targetDriverId = driverId || orderToUpdate.driverId;
         
         if (targetDriverId) {
           orderGroupIds.forEach(currentOrderId => {
-            const finishedOrder = sourceOrders.find(o => o.id === currentOrderId);
-            // Só credita se o pedido não estiver entregue AINDA e NÃO tiver taxa de retorno pendente
-            // (Se tiver taxa de retorno, o crédito ocorre via handleConfirmReturnRobust)
-            if (finishedOrder && finishedOrder.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
+            const finishedOrder = optimisticOrders.find(o => o.id === currentOrderId);
+            // Só credita se o pedido não estava entregue e não tem taxa de retorno pendente
+            if (finishedOrder && previousOrders.find(po => po.id === currentOrderId)?.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
               totalToCredit += (finishedOrder.driverEarning || 0);
             }
           });
 
           if (totalToCredit > 0) {
-            const success = await dbService.adjustDriverBalance(targetDriverId, totalToCredit);
-            if (!success) {
-              alert("Erro ao processar saldo do motoboy. Tentaremos sincronizar novamente em instantes.");
-            }
+            await dbService.adjustDriverBalance(targetDriverId, totalToCredit);
           }
         }
       }
 
-      const newOrders = sourceOrders.map(o => orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o);
-      await dbService.saveOrders(newOrders);
-      setGlobalOrders(newOrders);
+      // 4. PERSISTÊNCIA NO BANCO (Em segundo plano e muito mais rápida)
+      const changedOrders = optimisticOrders.filter(o => orderGroupIds.has(o.id));
+      await dbService.updateOrders(changedOrders);
+      await dbService.saveOrders(optimisticOrders); // Garante persistência local completa e notificação entre abas
       
-      // Força refresh para garantir que todos vejam o saldo atualizado do banco
-      await loadAllData();
+      // Atualiza o saldo dos drivers localmente se houve crédito
+      if (status === OrderStatus.DELIVERED) {
+        const d = await dbService.getDrivers();
+        setDrivers(d);
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar status:", error);
+      // Reverte em caso de erro crítico
+      setGlobalOrders(previousOrders);
+      alert("Erro ao sincronizar status. Tente novamente.");
     } finally {
+      isInternalUpdate.current = false;
       setIsSyncing(false);
     }
   };
