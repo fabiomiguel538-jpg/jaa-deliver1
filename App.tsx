@@ -55,6 +55,8 @@ const App: React.FC = () => {
   const [canInstall, setCanInstall] = useState(false);
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
 
+  const [isAppLoading, setIsAppLoading] = useState(true);
+
   const lastInternalUpdate = useRef(0);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
@@ -172,6 +174,7 @@ const App: React.FC = () => {
       console.error("Erro ao carregar dados do banco:", error);
     } finally {
       setIsSyncing(false); 
+      setIsAppLoading(false);
     }
   }, [role]);
   
@@ -705,7 +708,18 @@ const App: React.FC = () => {
     }
   };
 
-  // Removed isLoading spinner to render base JSX instantly
+  if (isAppLoading) {
+    return (
+      <div className="min-h-[100dvh] bg-[#f7f7f7] flex flex-col items-center justify-center p-4">
+        <div className="text-center animate-pulse">
+          <h1 className="text-7xl md:text-8xl font-black italic tracking-tighter font-jaa select-none mb-4">
+            <span className="text-[#F84F39]">Pede</span><span className="text-[#FFB800]">Já</span>
+          </h1>
+          <div className="w-12 h-12 border-4 border-[#F84F39] border-t-transparent rounded-full animate-spin mx-auto mt-8"></div>
+        </div>
+      </div>
+    );
+  }
   
   if (view === 'store-signup') return <StoreRegistration settings={platformSettings} onSignup={(p) => { const newStore: StoreProfile = { ...p, id: 's-' + Math.random().toString(36).substr(2,6), status: StoreRegistrationStatus.PENDING, registrationDate: new Date().toLocaleDateString(), balance: 0, deliveryRadius: 5, accessValidity: 0, minPrice: platformSettings.minPrice, pricePerKm: platformSettings.pricePerKm, returnFeeAmount: platformSettings.returnFeeAmount, driverEarningModel: platformSettings.driverEarningModel, driverEarningPercentage: platformSettings.driverEarningPercentage, driverEarningFixed: platformSettings.driverEarningFixed }; updateStateAndSave(setStores, dbService.saveStores, prev => [...prev, newStore]); setRole(UserRole.STORE); setCurrentStoreId(newStore.id); setView('landing'); localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.STORE, storeId: newStore.id })); localStorage.setItem('jaa_cached_store', JSON.stringify(newStore)); }} onBack={() => setView('landing')} />;
   if (view === 'driver-signup') return <DriverRegistration onSignup={(p) => { const newDriver: DriverProfile = { ...p, id: 'd-' + Math.random().toString(36).substr(2,6), status: DriverRegistrationStatus.PENDING, registrationDate: new Date().toLocaleDateString(), balance: 0, isOnline: false }; updateStateAndSave(setDrivers, dbService.saveDrivers, prev => [...prev, newDriver]); setRole(UserRole.DRIVER); setCurrentDriverId(newDriver.id); setView('landing'); localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.DRIVER, driverId: newDriver.id })); localStorage.setItem('jaa_cached_driver', JSON.stringify(newDriver)); }} onBack={() => setView('landing')} />;
