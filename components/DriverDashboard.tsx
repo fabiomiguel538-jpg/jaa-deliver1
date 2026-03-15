@@ -252,74 +252,62 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
   };
 
+  // Polling Seguro (5 Segundos)
   useEffect(() => {
-    requestNotificationPermission();
+    const interval = setInterval(() => {
+      onRefresh();
+    }, 5000);
+    // CRUCIAL: Retorno clearInterval no cleanup para não estourar a memória
+    return () => clearInterval(interval);
+  }, [onRefresh]);
 
+  // Restauração do Firebase (FCM)
+  useEffect(() => {
     const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Mensagem recebida com o app aberto: ', payload);
+      console.log('Mensagem recebida:', payload);
       
-      // Tenta tocar o som (Força o play mesmo se houver restrição, tentando várias vezes se necessário)
-      const playSound = () => {
-        alertSound.currentTime = 0;
-        alertSound.play().catch(e => {
-          console.log('Autoplay bloqueado, aguardando interação ou tentando novamente:', e);
-          // Tenta novamente em 1 segundo caso o navegador libere
-          setTimeout(playSound, 1000);
+      const data = payload.data as any;
+      if (data) {
+        // Preenche o estado dadosNovaCorrida com o payload.data
+        setDadosNovaCorrida({
+          id: data.id || data.orderId || data.corrida_id || '',
+          endereco: data.endereco || data.detalhes || 'Nova corrida disponível',
+          valor: data.valor || '---',
+          distancia: data.distancia || data.distancia_km || '---',
+          valorPorKm: data.valorPorKm || '---',
+          paradas: data.paradas || '1 parada',
+          nomeLoja: data.nomeLoja || 'Estabelecimento',
+          enderecoColeta: data.enderecoColeta || 'Endereço de coleta...',
+          tipoEntrega: data.tipoEntrega || 'Nuvem',
+          metodoPagamento: data.metodoPagamento || 'Carteira'
         });
-      };
-      playSound();
 
-      // Tenta vibrar o telemóvel com um padrão forte e repetitivo
-      if ("vibrate" in navigator) {
-        navigator.vibrate([1000, 500, 1000, 500, 1000, 500, 2000]);
+        // Altere o estado para abrir o Modal customizado
+        setIsModalOpen(true);
+        setTimeLeft(30);
+
+        // Toque o áudio usando um bloco try/catch para evitar crashes de autoplay
+        try {
+          alertSound.currentTime = 0;
+          alertSound.play().catch(e => console.warn("Autoplay bloqueado:", e));
+        } catch (error) {
+          console.error("Erro ao tocar áudio:", error);
+        }
+
+        // Vibração opcional para garantir atenção
+        if ("vibrate" in navigator) {
+          navigator.vibrate([1000, 500, 1000]);
+        }
       }
-      
-      // Extrair os detalhes da corrida diretamente do payload.data
-      const corridaData = payload.data || {};
-      const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
-      
-      // Forçar a notificação no sistema operacional (Foreground) - APARECE NA BARRA DE STATUS
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.showNotification(
-            payload.notification?.title || payload.data?.titulo || "🛵 Nova Corrida!", 
-            {
-              body: payload.notification?.body || payload.data?.detalhes || "Deslize para baixo e toque aqui.",
-              icon: "/favicon.ico", 
-              badge: "/favicon.ico",
-              tag: "nova-corrida", // Evita duplicatas mas garante que apareça
-              renotify: true,      // Faz o celular vibrar/tocar novamente se já houver uma
-              requireInteraction: true,
-              vibrate: [1000, 500, 1000, 500, 1000],
-              data: { url: window.location.origin }
-            } as any
-          );
-        });
-      }
-      
-      // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
-      const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
-      
-      // Reseta o cronômetro e abre o modal imediatamente para ser "elegante" e rápido
-      setTimeLeft(30);
-      setDadosNovaCorrida({
-        id: idCapturado || '',
-        endereco: corridaData.endereco || detalhes,
-        valor: corridaData.valor || '---',
-        distancia: corridaData.distancia_km || corridaData.distancia || '---',
-        valorPorKm: corridaData.valorPorKm || '---',
-        paradas: corridaData.paradas || '1 parada',
-        nomeLoja: corridaData.nomeLoja || 'Estabelecimento',
-        enderecoColeta: corridaData.enderecoColeta || 'Endereço de coleta...',
-        tipoEntrega: corridaData.tipoEntrega || 'Nuvem',
-        metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
-      });
-      setIsModalOpen(true);
     });
 
-    return () => {
-      unsubscribe();
-    };
+    // CRUCIAL: Retorne a função de unsubscribe no cleanup deste useEffect
+    return () => unsubscribe();
+  }, []);
+
+  // Efeito separado para permissões
+  useEffect(() => {
+    requestNotificationPermission();
   }, []);
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
