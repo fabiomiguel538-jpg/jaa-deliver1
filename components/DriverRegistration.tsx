@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { DriverProfile } from '../types';
-import { compressImage } from '../utils/imageCompressor';
 
 interface DriverRegistrationProps {
   onSignup: (profile: Omit<DriverProfile, 'id' | 'status' | 'registrationDate' | 'balance'>) => void;
@@ -53,16 +52,14 @@ const DriverRegistration: React.FC<DriverRegistrationProps> = ({ onSignup, onBac
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
     const file = e.target.files?.[0];
     if (file) {
-      try {
-        const compressedBase64 = await compressImage(file);
-        setForm(prev => ({ ...prev, [field]: compressedBase64 }));
-      } catch (error) {
-        console.error("Erro ao processar imagem:", error);
-        alert("Erro ao processar a imagem. Tente uma foto menor.");
-      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setForm(prev => ({ ...prev, [field]: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
