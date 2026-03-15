@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Order, OrderStatus, StoreProfile, Location, DriverProfile, PlatformSettings, StoreRegistrationStatus } from '../types';
 import { APP_LOGO, LOGO_SVG_FALLBACK } from '../constants';
+import { compressImage } from '../utils/imageCompressor';
 import MapView from './MapView';
 import Checkout from './Checkout';
 
@@ -142,6 +143,14 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const modalMapRef = useRef<any>(null);
   const modalMarkerRef = useRef<any>(null);
 
+  // FIX: Ref para verificar se o componente está montado antes de atualizar o estado em callbacks assíncronos
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const handleConfirmReturnLocal = (orderId: string) => {
     if (processingReturns.has(orderId)) return;
     
@@ -153,11 +162,13 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     
     // Opcional: Remover do processamento após um tempo seguro se o sync não tiver completado
     setTimeout(() => {
-      setProcessingReturns(prev => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
+      if (isMountedRef.current) {
+        setProcessingReturns(prev => {
+          const next = new Set(prev);
+          next.delete(orderId);
+          return next;
+        });
+      }
     }, 5000);
   };
 
@@ -513,15 +524,17 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     setShowCheckout(true);
   };
   
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'ORDER' | 'RECHARGE') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'ORDER' | 'RECHARGE') => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (type === 'ORDER') setPaymentReceipt(reader.result as string);
-        else setRechargeReceipt(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressedBase64 = await compressImage(file);
+        if (type === 'ORDER') setPaymentReceipt(compressedBase64);
+        else setRechargeReceipt(compressedBase64);
+      } catch (error) {
+        console.error("Erro ao processar imagem:", error);
+        alert("Erro ao processar a imagem. Tente uma foto menor.");
+      }
     }
   };
 

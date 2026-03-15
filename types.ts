@@ -98,7 +98,6 @@ export interface DriverProfile {
   isOnline?: boolean;
   currentLocation?: Location;
   fcmToken?: string;
-  oneSignalId?: string;
   pixKey?: string;
   isBlocked?: boolean;
   blockReason?: string;
