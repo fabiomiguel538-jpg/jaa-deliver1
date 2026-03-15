@@ -91,7 +91,6 @@ const App: React.FC = () => {
         return;
       }
 
-      await dbService.init();
       const [d, s, o, r, w, settings] = await Promise.all([
         dbService.getDrivers(),
         dbService.getStores(),
@@ -130,6 +129,11 @@ const App: React.FC = () => {
     setCurrentStoreId(null); 
     localStorage.removeItem('jaa_session'); 
     setView('landing'); 
+  }, []);
+
+  // Inicialização única do banco
+  useEffect(() => {
+    dbService.init();
   }, []);
 
   useEffect(() => {
@@ -177,30 +181,32 @@ const App: React.FC = () => {
       }
     });
 
+    let syncTimeout: any;
     const unsubscribe = dbService.subscribe(() => {
-      if (Date.now() - lastInternalUpdate.current > 3000) {
-        loadAllData();
-      }
+      clearTimeout(syncTimeout);
+      syncTimeout = setTimeout(() => {
+        if (Date.now() - lastInternalUpdate.current > 3000) {
+          loadAllData();
+        }
+      }, 2000); // Debounce de 2s para evitar tempestade de atualizações
     });
     return () => {
         unsubscribe();
+        clearTimeout(syncTimeout);
     };
   }, [loadAllData]);
   
   useEffect(() => {
-    // Configuração do intervalo de atualização automática para exatamente 1 segundo (1.000ms)
-    const POLLING_INTERVAL = 1000; 
+    // Configuração do intervalo de atualização automática para 15 segundos
+    const POLLING_INTERVAL = 15000; 
     
     const pollData = setInterval(() => {
       // A busca de dados ocorre em segundo plano se houver um usuário logado e não houver sincronização ativa
-      // Adicionado check de timestamp para evitar sobrescrever mudanças otimistas
-      if (role && !isSyncing && (Date.now() - lastInternalUpdate.current > 3000)) {
+      if (role && !isSyncing && (Date.now() - lastInternalUpdate.current > 5000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);
 
-    // Função de limpeza (cleanup) para cancelar o temporizador ao sair da tela ou desmontar o componente
-    // Isso evita vazamentos de memória (memory leaks) e processamento desnecessário
     return () => clearInterval(pollData);
   }, [role, isSyncing, loadAllData]);
 

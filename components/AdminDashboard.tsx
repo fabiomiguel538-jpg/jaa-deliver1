@@ -80,6 +80,7 @@ interface AdminDashboardProps {
   onUpdateStore: (id: string, data: Partial<StoreProfile>) => void;
   onResetStatistics: () => void;
   isSyncing: boolean;
+  isCloudConnected: boolean;
   lastSyncTime: Date | null;
   onRefresh: () => void;
 }
@@ -93,7 +94,7 @@ const NavButton = ({ onClick, isActive, icon, label, notificationCount }: { onCl
 );
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-  onLogout, orders, settings, onUpdateSettings, allDrivers, onApproveDriver, onRejectDriver, onDeleteDriver, allStores, onApproveStore, onRejectStore, onDeleteStore, onApproveAccess, rechargeRequests, onApproveRecharge, onRejectRecharge, withdrawalRequests, onApproveWithdrawal, onRejectWithdrawal, onApprovePayment, onRejectPayment, onUpdateDriver, onUpdateStore, onResetStatistics, isSyncing, lastSyncTime, onRefresh
+  onLogout, orders, settings, onUpdateSettings, allDrivers, onApproveDriver, onRejectDriver, onDeleteDriver, allStores, onApproveStore, onRejectStore, onDeleteStore, onApproveAccess, rechargeRequests, onApproveRecharge, onRejectRecharge, withdrawalRequests, onApproveWithdrawal, onRejectWithdrawal, onApprovePayment, onRejectPayment, onUpdateDriver, onUpdateStore, onResetStatistics, isSyncing, isCloudConnected, lastSyncTime, onRefresh
 }) => {
   const [view, setView] = useState('dashboard');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
@@ -348,6 +349,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                <div className="flex items-center gap-4">
                   <h3 className="text-2xl font-black text-gray-800 italic tracking-tight font-jaa">Painel Executivo</h3>
+                  {/* Botão de atualização manual oculto conforme solicitação (atualização automática em background)
                   <button 
                     onClick={onRefresh}
                     disabled={isSyncing}
@@ -356,6 +358,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
                   </button>
+                  */}
                   <button 
                     onClick={handleResetClick}
                     className="bg-red-50 text-red-500 hover:bg-red-100 p-2.5 rounded-xl transition-all shadow-sm border border-red-100 flex items-center gap-2 active:scale-95"
@@ -490,8 +493,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="w-12 h-12 jaa-gradient rounded-2xl flex items-center justify-center text-white font-black text-xl font-jaa italic flex-shrink-0">J</div>
           <div className="flex-1">
             <h1 className="text-lg font-black tracking-tighter">JAADelivery</h1>
-            <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${lastSyncTime ? 'opacity-100' : 'opacity-0'}`}>
-                {/* Indicador de sincronização oculto conforme solicitado */}
+            <div className="flex flex-col gap-1 mt-1">
+                <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${lastSyncTime ? 'opacity-100' : 'opacity-0'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                    <span className={`text-[9px] font-black uppercase tracking-widest ${isCloudConnected ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {isCloudConnected ? 'Online' : 'Erro de Conexão'}
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-[8px] text-gray-400 font-bold uppercase">
+                        {isSyncing ? 'Sincronizando...' : `Sinc: ${timeAgo}`}
+                    </span>
+                    <button 
+                        onClick={onRefresh} 
+                        disabled={isSyncing}
+                        className={`text-[10px] hover:scale-110 transition-transform ${isSyncing ? 'animate-spin' : ''}`}
+                        title="Sincronizar Agora"
+                    >
+                        🔄
+                    </button>
+                </div>
             </div>
           </div>
         </div>

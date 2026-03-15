@@ -352,18 +352,31 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     lastAvailableCount.current = cityOrders.length;
   }, [cityOrders]);
 
+  const lastLocationUpdate = useRef<{ lat: number; lng: number; time: number }>({ lat: 0, lng: 0, time: 0 });
+
   useEffect(() => {
     let watchId: number;
     if (isOnline && profile?.status === DriverRegistrationStatus.APPROVED) {
       if ('geolocation' in navigator) {
         watchId = navigator.geolocation.watchPosition(
           (position) => {
-            const newLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
-            onUpdateLocation(profile.id, newLoc);
-            setGpsError(null);
+            const { latitude, longitude } = position.coords;
+            const now = Date.now();
+            
+            // Diferença mínima para considerar movimento (aprox 10-20 metros)
+            const latDiff = Math.abs(latitude - lastLocationUpdate.current.lat);
+            const lngDiff = Math.abs(longitude - lastLocationUpdate.current.lng);
+            
+            // Só atualiza se moveu significativamente ou passou 30 segundos
+            if (latDiff > 0.0001 || lngDiff > 0.0001 || (now - lastLocationUpdate.current.time > 30000)) {
+              lastLocationUpdate.current = { lat: latitude, lng: longitude, time: now };
+              const newLoc = { lat: latitude, lng: longitude };
+              onUpdateLocation(profile.id, newLoc);
+              setGpsError(null);
+            }
           },
           () => setGpsError("GPS desativado."),
-          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
         );
       }
     }

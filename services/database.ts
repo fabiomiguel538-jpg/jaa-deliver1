@@ -124,7 +124,7 @@ export const dbService = {
   isCloudActive: () => !!databaseUrl,
 
   init: async () => {
-    if (!databaseUrl) return;
+    if (!databaseUrl || (window as any)._jaa_db_initialized) return;
     try {
       await executeSql(`CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY, data JSONB NOT NULL);`);
       await executeSql(`CREATE TABLE IF NOT EXISTS drivers (id TEXT PRIMARY KEY, data JSONB NOT NULL);`);
@@ -137,6 +137,7 @@ export const dbService = {
       if (settings.length === 0) {
         await executeSql(`INSERT INTO settings (id, data) VALUES (1, $1)`, [DEFAULT_SETTINGS]);
       }
+      (window as any)._jaa_db_initialized = true;
     } catch (e) {
       console.warn("Jaa DB: Erro no Init da nuvem.");
     }

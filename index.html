@@ -25,9 +25,9 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Mercado Pago SDK -->
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
+    <script defer src="https://sdk.mercadopago.com/js/v2"></script>
     
 <script type="importmap">
 {
@@ -44,7 +44,22 @@
 <link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-[#f7f7f7]">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Tela de carregamento estática (Splash Screen) para evitar "tela em branco" antes do React hidratar -->
+      <div style="min-height: 100dvh; background-color: #f7f7f7; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="text-align: center; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;">
+          <h1 style="font-size: 4.5rem; font-weight: 900; font-style: italic; letter-spacing: -0.05em; font-family: 'Poppins', sans-serif; user-select: none; margin-bottom: 1rem;">
+            <span style="color: #F84F39;">Pede</span><span style="color: #FFB800;">Já</span>
+          </h1>
+          <div style="width: 3rem; height: 3rem; border: 4px solid #F84F39; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin: 2rem auto 0 auto;"></div>
+        </div>
+      </div>
+      <style>
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @media (min-width: 768px) { h1 { font-size: 6rem !important; } }
+      </style>
+    </div>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
