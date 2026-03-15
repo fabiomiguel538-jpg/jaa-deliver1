@@ -255,7 +255,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   // Polling Seguro (5 Segundos)
   useEffect(() => {
     const interval = setInterval(() => {
-      onRefresh();
+      if (document.visibilityState === 'visible') {
+        onRefresh();
+      }
     }, 5000);
     // CRUCIAL: Retorno clearInterval no cleanup para não estourar a memória
     return () => clearInterval(interval);

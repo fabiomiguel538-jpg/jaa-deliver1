@@ -82,12 +82,17 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const lastSyncTimeRef = useRef<number>(0);
+  const isLoadingDataRef = useRef<boolean>(false);
+
   const loadAllData = useCallback(async () => {
+    if (isLoadingDataRef.current) return;
+    
     setIsSyncing(true);
+    isLoadingDataRef.current = true;
     try {
       // Bloqueia o carregamento se houve uma atualização interna muito recente (evita flicker/reversão)
       if (Date.now() - lastInternalUpdate.current < 3000) {
-        setIsSyncing(false);
         return;
       }
 
@@ -102,7 +107,6 @@ const App: React.FC = () => {
       
       // Verificamos novamente o timestamp antes de aplicar para evitar race conditions
       if (Date.now() - lastInternalUpdate.current < 3000) {
-        setIsSyncing(false);
         return;
       }
 
@@ -120,6 +124,7 @@ const App: React.FC = () => {
     } finally {
       setIsSyncing(false); 
       setIsLoading(false);
+      isLoadingDataRef.current = false;
     }
   }, []);
   
@@ -201,8 +206,8 @@ const App: React.FC = () => {
     const POLLING_INTERVAL = 15000; 
     
     const pollData = setInterval(() => {
-      // A busca de dados ocorre em segundo plano se houver um usuário logado e não houver sincronização ativa
-      if (role && !isSyncing && (Date.now() - lastInternalUpdate.current > 5000)) {
+      // Só busca se a aba estiver visível e houver usuário logado
+      if (document.visibilityState === 'visible' && role && !isSyncing && (Date.now() - lastInternalUpdate.current > 5000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);

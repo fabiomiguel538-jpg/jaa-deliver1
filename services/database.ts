@@ -3,6 +3,9 @@ import { Order, DriverProfile, StoreProfile, RechargeRequest, PlatformSettings, 
 
 const databaseUrl = 'postgresql://neondb_owner:npg_Pynw4DFcu2oz@ep-summer-fire-ahg7bdxc.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require';
 
+// Instância única para evitar overhead de reconexão constante
+const sqlClient = databaseUrl ? neon(databaseUrl) : null;
+
 const syncChannel = new BroadcastChannel('jaa_delivery_sync');
 
 const DEFAULT_SETTINGS: PlatformSettings = {
@@ -21,27 +24,25 @@ const DEFAULT_SETTINGS: PlatformSettings = {
 
 const CLOUD_ORDER_LIMIT = 100;
 
-async function executeSql(query: string, params: any[] = [], retries = 5): Promise<any[]> {
-  if (!databaseUrl) return [];
+async function executeSql(query: string, params: any[] = [], retries = 3): Promise<any[]> {
+  if (!sqlClient) return [];
   
   for (let i = 0; i < retries; i++) {
     try {
-      const sql = neon(databaseUrl);
-      const result = await sql(query, params);
+      const result = await sqlClient(query, params);
       return result as any[];
     } catch (error: any) {
       const errorMessage = error.message || "";
-      const isNetworkError = errorMessage.includes('Failed to fetch') || errorMessage.includes('Load failed');
+      const isNetworkError = errorMessage.includes('Failed to fetch') || errorMessage.includes('Load failed') || errorMessage.includes('NetworkError');
       const isDeadlock = errorMessage.includes('deadlock detected');
       
       if ((isNetworkError || isDeadlock) && i < retries - 1) {
-        // Para deadlocks, usamos um delay aleatório (jitter) para evitar que as transações colidam novamente
-        const delay = isDeadlock ? (500 + Math.random() * 1000) * (i + 1) : 1000 * (i + 1);
-        console.warn(`Database attempt ${i + 1} failed (${isDeadlock ? 'deadlock' : 'network'}), retrying in ${Math.round(delay)}ms...`);
+        const delay = isDeadlock ? (300 + Math.random() * 500) * (i + 1) : 800 * (i + 1);
+        console.warn(`Database attempt ${i + 1} failed, retrying in ${Math.round(delay)}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      console.error("Erro na Database (Neon):", errorMessage);
+      console.error("Erro crítico na Database (Neon):", errorMessage);
       throw error;
     }
   }
