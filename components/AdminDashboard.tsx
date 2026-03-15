@@ -348,15 +348,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                <div className="flex items-center gap-4">
                   <h3 className="text-2xl font-black text-gray-800 italic tracking-tight font-jaa">Painel Executivo</h3>
+                  {/* Botão de atualização manual oculto conforme solicitação (atualização automática em background)
                   <button 
                     onClick={onRefresh}
                     disabled={isSyncing}
                     className="bg-blue-50 text-blue-500 hover:bg-blue-100 p-2.5 rounded-xl transition-all shadow-sm border border-blue-100 flex items-center gap-2 active:scale-95 disabled:opacity-50"
                     title="Atualizar Dados"
                   >
-                    <span className={`text-lg ${isSyncing ? 'animate-spin' : ''}`}>🔄</span>
                     <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
                   </button>
+                  */}
                   <button 
                     onClick={handleResetClick}
                     className="bg-red-50 text-red-500 hover:bg-red-100 p-2.5 rounded-xl transition-all shadow-sm border border-red-100 flex items-center gap-2 active:scale-95"
@@ -492,10 +493,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex-1">
             <h1 className="text-lg font-black tracking-tighter">JAADelivery</h1>
             <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${lastSyncTime ? 'opacity-100' : 'opacity-0'}`}>
-                <div className={`w-2 h-2 rounded-full transition-colors ${isSyncing ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300'}`}></div>
-                <p className="text-[9px] font-bold text-gray-400">
-                  {isSyncing ? 'Sincronizando...' : `Sinc. ${timeAgo}`}
-                </p>
+                {/* Indicador de sincronização oculto conforme solicitado */}
             </div>
           </div>
         </div>

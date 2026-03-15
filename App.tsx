@@ -86,7 +86,7 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       // Bloqueia o carregamento se houve uma atualização interna muito recente (evita flicker/reversão)
-      if (Date.now() - lastInternalUpdate.current < 2000) {
+      if (Date.now() - lastInternalUpdate.current < 3000) {
         setIsSyncing(false);
         return;
       }
@@ -102,7 +102,7 @@ const App: React.FC = () => {
       ]);
       
       // Verificamos novamente o timestamp antes de aplicar para evitar race conditions
-      if (Date.now() - lastInternalUpdate.current < 2000) {
+      if (Date.now() - lastInternalUpdate.current < 3000) {
         setIsSyncing(false);
         return;
       }
@@ -178,7 +178,7 @@ const App: React.FC = () => {
     });
 
     const unsubscribe = dbService.subscribe(() => {
-      if (Date.now() - lastInternalUpdate.current > 2000) {
+      if (Date.now() - lastInternalUpdate.current > 3000) {
         loadAllData();
       }
     });
@@ -187,14 +187,20 @@ const App: React.FC = () => {
     };
   }, [loadAllData]);
   
+  // FIX: Usando ref para isSyncing para evitar recriar o setInterval a cada mudança de estado
+  const isSyncingRef = useRef(isSyncing);
   useEffect(() => {
-    // Configuração do intervalo de atualização automática para exatamente 5 segundos (5.000ms)
-    const POLLING_INTERVAL = 5000; 
+    isSyncingRef.current = isSyncing;
+  }, [isSyncing]);
+
+  useEffect(() => {
+    // Configuração do intervalo de atualização automática para exatamente 1 segundo (1.000ms)
+    const POLLING_INTERVAL = 1000; 
     
     const pollData = setInterval(() => {
       // A busca de dados ocorre em segundo plano se houver um usuário logado e não houver sincronização ativa
       // Adicionado check de timestamp para evitar sobrescrever mudanças otimistas
-      if (role && !isSyncing && (Date.now() - lastInternalUpdate.current > 2000)) {
+      if (role && !isSyncingRef.current && (Date.now() - lastInternalUpdate.current > 3000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);
@@ -202,7 +208,7 @@ const App: React.FC = () => {
     // Função de limpeza (cleanup) para cancelar o temporizador ao sair da tela ou desmontar o componente
     // Isso evita vazamentos de memória (memory leaks) e processamento desnecessário
     return () => clearInterval(pollData);
-  }, [role, isSyncing, loadAllData]);
+  }, [role, loadAllData]); // FIX: Removido isSyncing da dependência para evitar loop de recriação
 
   const handleUpdateSettingsAndSave = (newSettings: PlatformSettings) => {
     setPlatformSettings(newSettings);

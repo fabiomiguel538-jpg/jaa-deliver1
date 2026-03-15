@@ -142,6 +142,14 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const modalMapRef = useRef<any>(null);
   const modalMarkerRef = useRef<any>(null);
 
+  // FIX: Ref para verificar se o componente está montado antes de atualizar o estado em callbacks assíncronos
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const handleConfirmReturnLocal = (orderId: string) => {
     if (processingReturns.has(orderId)) return;
     
@@ -153,11 +161,13 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     
     // Opcional: Remover do processamento após um tempo seguro se o sync não tiver completado
     setTimeout(() => {
-      setProcessingReturns(prev => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
+      if (isMountedRef.current) {
+        setProcessingReturns(prev => {
+          const next = new Set(prev);
+          next.delete(orderId);
+          return next;
+        });
+      }
     }, 5000);
   };
 
@@ -629,7 +639,6 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
             disabled={isSyncing}
             className="w-full py-4 bg-white text-gray-800 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-sm border border-gray-100 hover:shadow-md active:scale-95 transition-all flex items-center justify-center gap-3"
           >
-            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
             {isSyncing ? 'Verificando...' : 'Verificar Aprovação'}
           </button>
           
@@ -674,14 +683,7 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
             <span>R$ {(profile.balance || 0).toFixed(2)}</span>
             <span className="text-[10px]">💳</span>
           </button>
-          <button 
-            onClick={onRefresh} 
-            disabled={isSyncing}
-            className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm disabled:opacity-50"
-            title="Atualizar dados"
-          >
-            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
-          </button>
+          {/* Botão de atualização oculto conforme solicitado */}
           <button onClick={() => setIsMenuOpen(true)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">☰</button>
         </div>
       </header>

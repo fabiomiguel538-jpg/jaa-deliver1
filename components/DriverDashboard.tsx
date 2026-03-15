@@ -79,10 +79,13 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [isUpdating, setIsUpdating] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
-  // Monitora mudança de status para liberar o botão de atualização
+  // Monitora mudança de status para liberar o botão de atualização com delay de 3s
   const currentStatus = activeOrders[0]?.status;
   useEffect(() => {
-    setIsUpdating(false);
+    const timer = setTimeout(() => {
+      setIsUpdating(false);
+    }, 3000);
+    return () => clearTimeout(timer);
   }, [currentStatus]);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -128,6 +131,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
   }, [isModalOpen]);
 
+  // FIX: Ref para verificar se o componente está montado antes de atualizar o estado em callbacks assíncronos
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // ============================================================================
   // FUNÇÃO DE ACEITE INDEPENDENTE (DIRETO DO MODAL)
   // ============================================================================
@@ -142,7 +153,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     // Dispara a atualização em segundo plano para ser "simultâneo" na visão do usuário
     onUpdateStatus(corridaId, OrderStatus.ACCEPTED, profile.id)
       .catch(err => console.error("Erro ao aceitar corrida direto do modal:", err))
-      .finally(() => setIsAccepting(false));
+      .finally(() => {
+        // Delay de 3 segundos para evitar duplicidade
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            setIsAccepting(false);
+          }
+        }, 3000);
+      });
     
     // Fecha o modal imediatamente para feedback instantâneo
     setIsModalOpen(false);
@@ -252,13 +270,12 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('Mensagem recebida com o app aberto: ', payload);
       
-      // Tenta tocar o som (Força o play mesmo se houver restrição, tentando várias vezes se necessário)
+      // Tenta tocar o som (Tenta apenas uma vez para evitar Memory Leak / Infinite Loop)
       const playSound = () => {
         alertSound.currentTime = 0;
         alertSound.play().catch(e => {
-          console.log('Autoplay bloqueado, aguardando interação ou tentando novamente:', e);
-          // Tenta novamente em 1 segundo caso o navegador libere
-          setTimeout(playSound, 1000);
+          console.log('Autoplay bloqueado, aguardando interação do usuário:', e);
+          // FIX: Removido o setTimeout recursivo que causava Memory Leak e travava a WebView
         });
       };
       playSound();
@@ -346,6 +363,12 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     lastAvailableCount.current = cityOrders.length;
   }, [cityOrders]);
 
+  // FIX: Usando ref para a função onUpdateLocation para evitar recriação do watchPosition a cada render
+  const onUpdateLocationRef = useRef(onUpdateLocation);
+  useEffect(() => {
+    onUpdateLocationRef.current = onUpdateLocation;
+  }, [onUpdateLocation]);
+
   useEffect(() => {
     let watchId: number;
     if (isOnline && profile?.status === DriverRegistrationStatus.APPROVED) {
@@ -353,7 +376,8 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         watchId = navigator.geolocation.watchPosition(
           (position) => {
             const newLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
-            onUpdateLocation(profile.id, newLoc);
+            // FIX: Chama a função atualizada através da ref
+            onUpdateLocationRef.current(profile.id, newLoc);
             setGpsError(null);
           },
           () => setGpsError("GPS desativado."),
@@ -361,8 +385,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         );
       }
     }
+    // FIX: Limpeza correta do watchPosition
     return () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
-  }, [isOnline, profile?.id, profile?.status, onUpdateLocation]);
+  }, [isOnline, profile?.id, profile?.status]); // Removido onUpdateLocation da dependência
 
   const handleUseGps = () => {
     if (!navigator.geolocation) return;
@@ -547,14 +572,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
             </button>
           </div>
 
-          <button 
-            onClick={onRefresh}
-            disabled={isSyncing}
-            className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base disabled:opacity-50 shadow-sm"
-            title="Atualizar corridas"
-          >
-            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
-          </button>
+          {/* Botão de atualização oculto conforme solicitado, mas mantendo a lógica de refresh automático */}
           <button onClick={() => setIsMenuOpen(true)} className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-base shadow-sm">☰</button>
         </div>
       </header>
