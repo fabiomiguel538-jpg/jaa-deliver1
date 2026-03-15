@@ -56,6 +56,16 @@ const App: React.FC = () => {
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
 
   const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isMinTimePassed, setIsMinTimePassed] = useState(false);
+
+  useEffect(() => {
+    // Garante que a tela de carregamento fique visível por pelo menos 2.5 segundos
+    // para disfarçar o tempo de renderização pesada do React e evitar a "tela branca"
+    const timer = setTimeout(() => {
+      setIsMinTimePassed(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const lastInternalUpdate = useRef(0);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
@@ -708,7 +718,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (isAppLoading) {
+  if (isAppLoading || !isMinTimePassed) {
     return (
       <div className="min-h-[100dvh] bg-[#f7f7f7] flex flex-col items-center justify-center p-4">
         <div className="text-center animate-pulse">
