@@ -142,14 +142,6 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const modalMapRef = useRef<any>(null);
   const modalMarkerRef = useRef<any>(null);
 
-  // FIX: Ref para verificar se o componente está montado antes de atualizar o estado em callbacks assíncronos
-  const isMountedRef = useRef(true);
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
   const handleConfirmReturnLocal = (orderId: string) => {
     if (processingReturns.has(orderId)) return;
     
@@ -161,13 +153,11 @@ const StoreDashboard: React.FC<StoreDashboardProps> = ({
     
     // Opcional: Remover do processamento após um tempo seguro se o sync não tiver completado
     setTimeout(() => {
-      if (isMountedRef.current) {
-        setProcessingReturns(prev => {
-          const next = new Set(prev);
-          next.delete(orderId);
-          return next;
-        });
-      }
+      setProcessingReturns(prev => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }, 5000);
   };
 

@@ -348,7 +348,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                <div className="flex items-center gap-4">
                   <h3 className="text-2xl font-black text-gray-800 italic tracking-tight font-jaa">Painel Executivo</h3>
-                  {/* Botão de atualização manual oculto conforme solicitação (atualização automática em background)
                   <button 
                     onClick={onRefresh}
                     disabled={isSyncing}
@@ -357,7 +356,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <span className="text-[10px] font-black uppercase tracking-widest">{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
                   </button>
-                  */}
                   <button 
                     onClick={handleResetClick}
                     className="bg-red-50 text-red-500 hover:bg-red-100 p-2.5 rounded-xl transition-all shadow-sm border border-red-100 flex items-center gap-2 active:scale-95"
