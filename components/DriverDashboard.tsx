@@ -3,21 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Order, OrderStatus, DriverProfile, Location, DriverRegistrationStatus, PlatformSettings, WithdrawalRequest, WithdrawalRequestStatus } from '../types';
 import MapView from './MapView';
 import { APP_LOGO } from '../constants';
-import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyC0jC_pMntiAj_XepIXauLsYh8vojOX-Mo",
-  authDomain: "pedeja-b9080.firebaseapp.com",
-  projectId: "pedeja-b9080",
-  storageBucket: "pedeja-b9080.firebasestorage.app",
-  messagingSenderId: "479512861371",
-  appId: "1:479512861371:web:0d3ae540e90882ee02a79e",
-  measurementId: "G-JZKXH4EBQX"
-};
-
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
 
 interface DriverDashboardProps {
   onLogout: () => void;
@@ -110,6 +95,160 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   } | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
+
+  // PERF: Carregamento assíncrono do Firebase (Deferred SDK)
+  // Adia a inicialização do Firebase para tirar o peso do carregamento principal
+  useEffect(() => {
+    let isMounted = true;
+    let unsubscribeFn: (() => void) | undefined;
+
+    const initFirebase = async () => {
+      try {
+        const { initializeApp, getApps, getApp } = await import('firebase/app');
+        const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
+        
+        if (!isMounted) return;
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyC0jC_pMntiAj_XepIXauLsYh8vojOX-Mo",
+          authDomain: "pedeja-b9080.firebaseapp.com",
+          projectId: "pedeja-b9080",
+          storageBucket: "pedeja-b9080.firebasestorage.app",
+          messagingSenderId: "479512861371",
+          appId: "1:479512861371:web:0d3ae540e90882ee02a79e",
+          measurementId: "G-JZKXH4EBQX"
+        };
+        
+        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+        const messaging = getMessaging(app);
+        
+        // Solicita permissão e gera token
+        const requestNotificationPermission = async () => {
+          setNotificationStatus(() => 'loading');
+          try {
+            const permission = await Notification.requestPermission();
+            if (!isMounted) return;
+            setNotificationStatus(() => permission as any);
+            console.log('Permissão de notificação:', permission);
+            
+            if (permission === 'granted') {
+              let registration;
+              if ('serviceWorker' in navigator) {
+                registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                await navigator.serviceWorker.ready;
+              }
+
+              if (!isMounted) return;
+
+              const token = await getToken(messaging, { 
+                vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc',
+                serviceWorkerRegistration: registration
+              });
+              
+              if (!isMounted) return;
+
+              if (token) {
+                setFcmToken(() => token);
+                onUpdateProfile(profile.id, { fcmToken: token });
+              } else {
+                setNotificationStatus(() => 'error');
+              }
+            }
+          } catch (error) {
+            console.error('Erro ao solicitar permissão/token:', error);
+            if (isMounted) setNotificationStatus(() => 'error');
+          }
+        };
+
+        requestNotificationPermission();
+
+        // Configura o listener de mensagens
+        unsubscribeFn = onMessage(messaging, (payload) => {
+          console.log('Mensagem recebida com o app aberto: ', payload);
+          
+          const playSound = () => {
+            try {
+              alertSound.currentTime = 0;
+              const playPromise = alertSound.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(e => console.log('Autoplay bloqueado:', e));
+              }
+            } catch (e) {
+              console.error('Erro ao tentar tocar o áudio:', e);
+            }
+          };
+          playSound();
+
+          try {
+            if ("vibrate" in navigator) {
+              navigator.vibrate([1000, 500, 1000, 500, 1000, 500, 2000]);
+            }
+          } catch (e) {
+            console.error('Erro ao tentar vibrar:', e);
+          }
+          
+          const corridaData = payload?.data || {};
+          const detalhes = String(corridaData.detalhes || payload?.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.');
+          
+          try {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then((registration) => {
+                registration.showNotification(
+                  String(payload?.notification?.title || corridaData.titulo || "🛵 Nova Corrida!"), 
+                  {
+                    body: detalhes,
+                    icon: "/favicon.ico", 
+                    badge: "/favicon.ico",
+                    tag: "nova-corrida",
+                    renotify: true,
+                    requireInteraction: true,
+                    vibrate: [1000, 500, 1000, 500, 1000],
+                    data: { url: window.location.origin }
+                  } as any
+                );
+              }).catch(e => console.error('Erro no showNotification:', e));
+            }
+          } catch (e) {
+            console.error('Erro ao acessar serviceWorker:', e);
+          }
+          
+          const idCapturado = String(corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId || '');
+          
+          // Atualização Segura de Estado (Callback pattern) para evitar stale closures e loops
+          setTimeLeft(() => 30);
+          setDadosNovaCorrida(() => ({
+            id: idCapturado,
+            endereco: detalhes,
+            valor: String(corridaData.valor || '---'),
+            distancia: String(corridaData.distancia_km || corridaData.distancia || '---'),
+            valorPorKm: String(corridaData.valorPorKm || '---'),
+            paradas: String(corridaData.paradas || '1 parada'),
+            nomeLoja: String(corridaData.nomeLoja || 'Estabelecimento'),
+            enderecoColeta: String(corridaData.enderecoColeta || 'Endereço de coleta...'),
+            tipoEntrega: String(corridaData.tipoEntrega || 'Nuvem'),
+            metodoPagamento: String(corridaData.metodoPagamento || 'Carteira de créditos')
+          }));
+          setIsModalOpen(() => true);
+        });
+
+      } catch (e) {
+        console.error("Erro ao carregar Firebase dinamicamente:", e);
+      }
+    };
+
+    // Adia a inicialização em 1500ms
+    const timer = setTimeout(() => {
+      initFirebase();
+    }, 1500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      if (unsubscribeFn) {
+        unsubscribeFn();
+      }
+    };
+  }, []);
 
   // Cronômetro do Modal
   useEffect(() => {
@@ -206,12 +345,18 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const handleToggleOnlineStatus = async () => {
     const nextStatus = !isOnline;
     if (nextStatus) {
-      await requestNotificationPermission();
       // "Prime" o áudio para permitir autoplay posterior
-      alertSound.play().then(() => {
-        alertSound.pause();
-        alertSound.currentTime = 0;
-      }).catch(e => console.log('Erro ao primar áudio:', e));
+      try {
+        const playPromise = alertSound.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            alertSound.pause();
+            alertSound.currentTime = 0;
+          }).catch(e => console.log('Erro ao primar áudio:', e));
+        }
+      } catch (e) {
+        console.error('Erro ao primar áudio:', e);
+      }
     }
     onToggleOnline(profile.id, nextStatus);
   };
@@ -222,115 +367,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     } else {
       setNotificationStatus('error');
     }
-  }, []);
-
-  const requestNotificationPermission = async () => {
-    setNotificationStatus('loading');
-    try {
-      const permission = await Notification.requestPermission();
-      setNotificationStatus(permission as any);
-      console.log('Permissão de notificação:', permission);
-      
-      if (permission === 'granted') {
-        // Registrar explicitamente o service worker do Firebase para garantir que as notificações funcionem
-        let registration;
-        if ('serviceWorker' in navigator) {
-          registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-          console.log('Firebase Service Worker registrado com sucesso');
-          
-          // Aguarda o service worker ficar ativo
-          await navigator.serviceWorker.ready;
-        }
-
-        // Use o VAPID Key correto do seu projeto Firebase
-        // Se as notificações não estiverem aparecendo, verifique se esta chave é a mesma do seu console Firebase (Configurações do Projeto > Cloud Messaging > Certificados Web Push)
-        const token = await getToken(messaging, { 
-          vapidKey: 'BJmmbTg1SIjJTOBjSh9CkkPIrE8EfiVjK8gmNpIhG9FExgFPeR0z3-mnRHeAuTykEv55UBVdBd-lmOwJjOr5ANc',
-          serviceWorkerRegistration: registration
-        });
-        
-        if (token) {
-          console.log("FCM Token gerado:", token);
-          setFcmToken(token);
-          onUpdateProfile(profile.id, { fcmToken: token });
-        } else {
-          console.warn("Nenhum token FCM gerado.");
-          setNotificationStatus('error');
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao solicitar permissão/token:', error);
-      setNotificationStatus('error');
-    }
-  };
-
-  useEffect(() => {
-    requestNotificationPermission();
-
-    const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Mensagem recebida com o app aberto: ', payload);
-      
-      // Tenta tocar o som (Tenta apenas uma vez para evitar Memory Leak / Infinite Loop)
-      const playSound = () => {
-        alertSound.currentTime = 0;
-        alertSound.play().catch(e => {
-          console.log('Autoplay bloqueado, aguardando interação do usuário:', e);
-          // FIX: Removido o setTimeout recursivo que causava Memory Leak e travava a WebView
-        });
-      };
-      playSound();
-
-      // Tenta vibrar o telemóvel com um padrão forte e repetitivo
-      if ("vibrate" in navigator) {
-        navigator.vibrate([1000, 500, 1000, 500, 1000, 500, 2000]);
-      }
-      
-      // Extrair os detalhes da corrida diretamente do payload.data
-      const corridaData = payload.data || {};
-      const detalhes = corridaData.detalhes || payload.notification?.body || 'Toque aqui para abrir e ver os detalhes da entrega.';
-      
-      // Forçar a notificação no sistema operacional (Foreground) - APARECE NA BARRA DE STATUS
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.showNotification(
-            payload.notification?.title || payload.data?.titulo || "🛵 Nova Corrida!", 
-            {
-              body: payload.notification?.body || payload.data?.detalhes || "Deslize para baixo e toque aqui.",
-              icon: "/favicon.ico", 
-              badge: "/favicon.ico",
-              tag: "nova-corrida", // Evita duplicatas mas garante que apareça
-              renotify: true,      // Faz o celular vibrar/tocar novamente se já houver uma
-              requireInteraction: true,
-              vibrate: [1000, 500, 1000, 500, 1000],
-              data: { url: window.location.origin }
-            } as any
-          );
-        });
-      }
-      
-      // Captura do ID (Crucial): Garante que o estado receba OBRIGATORIAMENTE a propriedade id
-      const idCapturado = corridaData.id || corridaData.orderId || corridaData.corrida_id || corridaData.corridaId;
-      
-      // Reseta o cronômetro e abre o modal imediatamente para ser "elegante" e rápido
-      setTimeLeft(30);
-      setDadosNovaCorrida({
-        id: idCapturado || '',
-        endereco: corridaData.endereco || detalhes,
-        valor: corridaData.valor || '---',
-        distancia: corridaData.distancia_km || corridaData.distancia || '---',
-        valorPorKm: corridaData.valorPorKm || '---',
-        paradas: corridaData.paradas || '1 parada',
-        nomeLoja: corridaData.nomeLoja || 'Estabelecimento',
-        enderecoColeta: corridaData.enderecoColeta || 'Endereço de coleta...',
-        tipoEntrega: corridaData.tipoEntrega || 'Nuvem',
-        metodoPagamento: corridaData.metodoPagamento || 'Carteira de créditos'
-      });
-      setIsModalOpen(true);
-    });
-
-    return () => {
-      unsubscribe();
-    };
   }, []);
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
@@ -422,7 +458,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     if (activeOrders.length === 0 || isUpdating) return;
     
     // Feedback tátil imediato
-    if ("vibrate" in navigator) navigator.vibrate(50);
+    try { if ("vibrate" in navigator) navigator.vibrate(50); } catch(e) {}
     
     setIsUpdating(true);
     try {
@@ -453,7 +489,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       return;
     }
 
-    if ("vibrate" in navigator) navigator.vibrate(50);
+    try { if ("vibrate" in navigator) navigator.vibrate(50); } catch(e) {}
     setIsUpdating(true);
     
     try {
@@ -813,8 +849,27 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                           <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Você está offline no momento.</p>
                           <p className="text-gray-300 text-[8px] font-bold uppercase">Ligue o interruptor acima para ver chamadas</p>
                         </div>
+                      ) : (isSyncing && cityOrders.length === 0) ? (
+                        // PERF: Skeleton Loading - Percepção de velocidade
+                        <div className="space-y-4">
+                          {[1, 2, 3].map(i => (
+                            <div key={i} className="bg-white border-2 border-gray-50 rounded-[2rem] p-6 shadow-lg animate-pulse">
+                              <div className="flex justify-between items-start mb-6">
+                                <div className="space-y-2">
+                                  <div className="h-4 w-16 bg-gray-200 rounded-full"></div>
+                                  <div className="h-8 w-24 bg-gray-200 rounded-full"></div>
+                                </div>
+                                <div className="h-8 w-24 bg-gray-200 rounded-full"></div>
+                              </div>
+                              <div className="space-y-3">
+                                <div className="h-4 w-full bg-gray-200 rounded-full"></div>
+                                <div className="h-4 w-3/4 bg-gray-200 rounded-full"></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       ) : cityOrders.length === 0 ? (
-                        <div className="py-20 text-center space-y-3"><div className="text-4xl animate-pulse">🔍</div><p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Buscando novas corridas em {profile?.city || 'sua região'}...</p></div>
+                        <div className="py-20 text-center space-y-3"><div className="text-4xl animate-pulse">🔍</div><p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Nenhuma corrida encontrada em {profile?.city || 'sua região'}.</p></div>
                       ) : (
                         cityOrders.map(order => {
                           const totalGain = (order.driverEarning || 0) + (order.hasReturnFee ? (order.returnFeePrice || 0) : 0);
@@ -958,7 +1013,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                             </div>
                             {notificationStatus !== 'granted' && (
                               <button 
-                                onClick={requestNotificationPermission}
+                                onClick={() => alert("Recarregue a página para solicitar a permissão novamente.")}
                                 type="button"
                                 className="px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm"
                               >
@@ -974,7 +1029,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                               </p>
                               {!fcmToken && (
                                 <button 
-                                  onClick={requestNotificationPermission}
+                                  onClick={() => alert("O token será gerado automaticamente. Verifique as permissões do navegador.")}
                                   type="button"
                                   className="mt-2 text-[10px] text-orange-600 font-bold underline"
                                 >
@@ -988,9 +1043,16 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                         <button 
                           type="button"
                           onClick={() => {
-                            alertSound.currentTime = 0;
-                            alertSound.play().catch(e => alert('Erro ao tocar som: ' + e.message));
-                            if ('vibrate' in navigator) navigator.vibrate([1000, 500, 1000]);
+                            try {
+                              alertSound.currentTime = 0;
+                              const playPromise = alertSound.play();
+                              if (playPromise !== undefined) {
+                                playPromise.catch(e => alert('Erro ao tocar som: ' + e.message));
+                              }
+                            } catch (e) {
+                              console.error('Erro ao tocar som:', e);
+                            }
+                            try { if ('vibrate' in navigator) navigator.vibrate([1000, 500, 1000]); } catch(e) {}
                             
                             // Simular notificação na barra de status
                             if ('serviceWorker' in navigator) {

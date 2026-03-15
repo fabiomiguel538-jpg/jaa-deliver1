@@ -9,8 +9,13 @@ import { dbService } from './services/database';
 import { APP_LOGO, LOGO_SVG_FALLBACK } from './constants';
 
 const App: React.FC = () => {
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [role, setRole] = useState<UserRole | null>(() => {
+    const savedSession = localStorage.getItem('jaa_session');
+    if (savedSession) {
+      try { return JSON.parse(savedSession).role; } catch (e) {}
+    }
+    return null;
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [view, setView] = useState<'landing' | 'store-signup' | 'driver-signup'>('landing');
   
@@ -22,12 +27,30 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState('');
 
   const [globalOrders, setGlobalOrders] = useState<Order[]>([]);
-  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
-  const [stores, setStores] = useState<StoreProfile[]>([]);
+  const [drivers, setDrivers] = useState<DriverProfile[]>(() => {
+    const cached = localStorage.getItem('jaa_cached_driver');
+    return cached ? [JSON.parse(cached)] : [];
+  });
+  const [stores, setStores] = useState<StoreProfile[]>(() => {
+    const cached = localStorage.getItem('jaa_cached_store');
+    return cached ? [JSON.parse(cached)] : [];
+  });
   const [rechargeRequests, setRechargeRequests] = useState<RechargeRequest[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
-  const [currentDriverId, setCurrentDriverId] = useState<string | null>(null);
-  const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
+  const [currentDriverId, setCurrentDriverId] = useState<string | null>(() => {
+    const savedSession = localStorage.getItem('jaa_session');
+    if (savedSession) {
+      try { return JSON.parse(savedSession).driverId || null; } catch (e) {}
+    }
+    return null;
+  });
+  const [currentStoreId, setCurrentStoreId] = useState<string | null>(() => {
+    const savedSession = localStorage.getItem('jaa_session');
+    if (savedSession) {
+      try { return JSON.parse(savedSession).storeId || null; } catch (e) {}
+    }
+    return null;
+  });
 
   const [canInstall, setCanInstall] = useState(false);
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
@@ -92,14 +115,42 @@ const App: React.FC = () => {
       }
 
       await dbService.init();
-      const [d, s, o, r, w, settings] = await Promise.all([
-        dbService.getDrivers(),
-        dbService.getStores(),
-        dbService.getOrders(),
-        dbService.getRecharges(),
-        dbService.getWithdrawals(),
-        dbService.getSettings()
-      ]);
+
+      // PERF: Otimização do Fetch Inicial - Busca apenas o necessário para o papel atual
+      let d: any[] = [];
+      let s: any[] = [];
+      let o: any[] = [];
+      let r: any[] = [];
+      let w: any[] = [];
+      let settings: any = null;
+
+      if (role === 'admin') {
+        [d, s, o, r, w, settings] = await Promise.all([
+          dbService.getDrivers(),
+          dbService.getStores(),
+          dbService.getOrders(),
+          dbService.getRecharges(),
+          dbService.getWithdrawals(),
+          dbService.getSettings()
+        ]);
+      } else if (role === 'driver') {
+        [o, settings, d, w] = await Promise.all([
+          dbService.getOrders(),
+          dbService.getSettings(),
+          dbService.getDrivers(), // Necessário para atualizar o saldo e status do próprio motoboy
+          dbService.getWithdrawals() // Necessário para ver o histórico de saques
+        ]);
+      } else if (role === 'store') {
+        [o, settings, s, d] = await Promise.all([
+          dbService.getOrders(),
+          dbService.getSettings(),
+          dbService.getStores(), // Necessário para atualizar o saldo da loja
+          dbService.getDrivers() // Necessário para a loja ver a localização dos motoboys (MapView)
+        ]);
+      } else {
+        // Visitante/Login
+        settings = await dbService.getSettings();
+      }
       
       // Verificamos novamente o timestamp antes de aplicar para evitar race conditions
       if (Date.now() - lastInternalUpdate.current < 3000) {
@@ -107,11 +158,12 @@ const App: React.FC = () => {
         return;
       }
 
-      setDrivers(d || []);
-      setStores(s || []);
-      setGlobalOrders(o || []);
-      setRechargeRequests(r || []);
-      setWithdrawalRequests(w || []);
+      if (role === 'admin' || role === 'driver' || role === 'store') setDrivers(d || []);
+      if (role === 'admin' || role === 'store') setStores(s || []);
+      if (role !== null) setGlobalOrders(o || []);
+      if (role === 'admin') setRechargeRequests(r || []);
+      if (role === 'admin' || role === 'driver') setWithdrawalRequests(w || []);
+      
       if (settings) {
         setPlatformSettings(prev => ({ ...prev, ...settings }));
       }
@@ -120,9 +172,8 @@ const App: React.FC = () => {
       console.error("Erro ao carregar dados do banco:", error);
     } finally {
       setIsSyncing(false); 
-      setIsLoading(false);
     }
-  }, []);
+  }, [role]);
   
   const handleLogout = useCallback(() => { 
     setRole(null); 
@@ -163,19 +214,9 @@ const App: React.FC = () => {
   }, [globalOrders, updateStateAndSave]);
 
   useEffect(() => {
-    loadAllData().then(() => {
-      const savedSession = localStorage.getItem('jaa_session');
-      if (savedSession) {
-        try {
-          const session = JSON.parse(savedSession);
-          setRole(session.role);
-          setCurrentDriverId(session.driverId || null);
-          setCurrentStoreId(session.storeId || null);
-        } catch (e) {
-          localStorage.removeItem('jaa_session');
-        }
-      }
-    });
+    // PERF: Carregamento assíncrono do banco de dados adiado para o primeiro render
+    // Isso permite que o JSX base renderize instantaneamente
+    loadAllData();
 
     const unsubscribe = dbService.subscribe(() => {
       if (Date.now() - lastInternalUpdate.current > 3000) {
@@ -244,6 +285,7 @@ const App: React.FC = () => {
         setRole(UserRole.DRIVER); 
         setShowDriverLogin(false); 
         localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.DRIVER, driverId: driver.id })); 
+        localStorage.setItem('jaa_cached_driver', JSON.stringify(driver));
       } else { setLoginError('Dados incorretos.'); }
     } else if (type === 'store') {
       let store = stores.find(s => s.taxId.trim().toLowerCase() === inputTaxId && s.password === inputPass);
@@ -257,6 +299,7 @@ const App: React.FC = () => {
         setRole(UserRole.STORE); 
         setShowStoreLogin(false); 
         localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.STORE, storeId: store.id })); 
+        localStorage.setItem('jaa_cached_store', JSON.stringify(store));
       } else { setLoginError('Dados incorretos.'); }
     }
     setIsSyncing(false);
@@ -575,15 +618,30 @@ const App: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (currentDriverId && drivers.length > 0) {
+      const current = drivers.find(d => d.id === currentDriverId);
+      if (current) localStorage.setItem('jaa_cached_driver', JSON.stringify(current));
+    }
+  }, [currentDriverId, drivers]);
+
+  useEffect(() => {
+    if (currentStoreId && stores.length > 0) {
+      const current = stores.find(s => s.id === currentStoreId);
+      if (current) localStorage.setItem('jaa_cached_store', JSON.stringify(current));
+    }
+  }, [currentStoreId, stores]);
+
   const currentDriver = drivers.find(d => d.id === currentDriverId);
   const currentStore = stores.find(s => s.id === currentStoreId);
   
-  useEffect(() => {
-    if (!isLoading) {
-      if (role === UserRole.DRIVER && currentDriverId && !currentDriver) handleLogout();
-      if (role === UserRole.STORE && currentStoreId && !currentStore) handleLogout();
-    }
-  }, [isLoading, role, currentDriverId, currentStoreId, currentDriver, currentStore, handleLogout]);
+  // Removed logout on missing profile to avoid race conditions with cache
+  // useEffect(() => {
+  //   if (!isLoading) {
+  //     if (role === UserRole.DRIVER && currentDriverId && !currentDriver) handleLogout();
+  //     if (role === UserRole.STORE && currentStoreId && !currentStore) handleLogout();
+  //   }
+  // }, [isLoading, role, currentDriverId, currentStoreId, currentDriver, currentStore, handleLogout]);
 
   const createGenericHandler = <T extends {id: string}>(
     setter: React.Dispatch<React.SetStateAction<T[]>>,
@@ -647,10 +705,10 @@ const App: React.FC = () => {
     }
   };
 
-  if (isLoading) return (<div className="h-[100dvh] flex flex-col items-center justify-center bg-white"><div className="w-12 h-12 border-4 border-[#F84F39] border-t-transparent rounded-full animate-spin mb-4"></div><h2 className="jaa-text-gradient font-black text-2xl animate-pulse font-jaa italic">PedeJá</h2></div>);
+  // Removed isLoading spinner to render base JSX instantly
   
-  if (view === 'store-signup') return <StoreRegistration settings={platformSettings} onSignup={(p) => { const newStore: StoreProfile = { ...p, id: 's-' + Math.random().toString(36).substr(2,6), status: StoreRegistrationStatus.PENDING, registrationDate: new Date().toLocaleDateString(), balance: 0, deliveryRadius: 5, accessValidity: 0, minPrice: platformSettings.minPrice, pricePerKm: platformSettings.pricePerKm, returnFeeAmount: platformSettings.returnFeeAmount, driverEarningModel: platformSettings.driverEarningModel, driverEarningPercentage: platformSettings.driverEarningPercentage, driverEarningFixed: platformSettings.driverEarningFixed }; updateStateAndSave(setStores, dbService.saveStores, prev => [...prev, newStore]); setRole(UserRole.STORE); setCurrentStoreId(newStore.id); setView('landing'); localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.STORE, storeId: newStore.id })); }} onBack={() => setView('landing')} />;
-  if (view === 'driver-signup') return <DriverRegistration onSignup={(p) => { const newDriver: DriverProfile = { ...p, id: 'd-' + Math.random().toString(36).substr(2,6), status: DriverRegistrationStatus.PENDING, registrationDate: new Date().toLocaleDateString(), balance: 0, isOnline: false }; updateStateAndSave(setDrivers, dbService.saveDrivers, prev => [...prev, newDriver]); setRole(UserRole.DRIVER); setCurrentDriverId(newDriver.id); setView('landing'); localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.DRIVER, driverId: newDriver.id })); }} onBack={() => setView('landing')} />;
+  if (view === 'store-signup') return <StoreRegistration settings={platformSettings} onSignup={(p) => { const newStore: StoreProfile = { ...p, id: 's-' + Math.random().toString(36).substr(2,6), status: StoreRegistrationStatus.PENDING, registrationDate: new Date().toLocaleDateString(), balance: 0, deliveryRadius: 5, accessValidity: 0, minPrice: platformSettings.minPrice, pricePerKm: platformSettings.pricePerKm, returnFeeAmount: platformSettings.returnFeeAmount, driverEarningModel: platformSettings.driverEarningModel, driverEarningPercentage: platformSettings.driverEarningPercentage, driverEarningFixed: platformSettings.driverEarningFixed }; updateStateAndSave(setStores, dbService.saveStores, prev => [...prev, newStore]); setRole(UserRole.STORE); setCurrentStoreId(newStore.id); setView('landing'); localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.STORE, storeId: newStore.id })); localStorage.setItem('jaa_cached_store', JSON.stringify(newStore)); }} onBack={() => setView('landing')} />;
+  if (view === 'driver-signup') return <DriverRegistration onSignup={(p) => { const newDriver: DriverProfile = { ...p, id: 'd-' + Math.random().toString(36).substr(2,6), status: DriverRegistrationStatus.PENDING, registrationDate: new Date().toLocaleDateString(), balance: 0, isOnline: false }; updateStateAndSave(setDrivers, dbService.saveDrivers, prev => [...prev, newDriver]); setRole(UserRole.DRIVER); setCurrentDriverId(newDriver.id); setView('landing'); localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.DRIVER, driverId: newDriver.id })); localStorage.setItem('jaa_cached_driver', JSON.stringify(newDriver)); }} onBack={() => setView('landing')} />;
 
   return (
     <div className="bg-[#f7f7f7] min-h-[100dvh] overflow-x-hidden">
