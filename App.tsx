@@ -382,6 +382,35 @@ const App: React.FC = () => {
       setIsSyncing(false);
     }
   };
+
+  // Processamento de comandos via URL (ex: cliques em notificações push com botões de ação)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    const orderId = params.get('id');
+
+    if (action && orderId && drivers.length > 0) {
+      const savedSession = localStorage.getItem('jaa_session');
+      if (savedSession) {
+        try {
+          const session = JSON.parse(savedSession);
+          if (session.role === UserRole.DRIVER && session.driverId) {
+            if (action === 'aceitar') {
+              handleUpdateOrderStatus(orderId, OrderStatus.ACCEPTED, session.driverId);
+            } else if (action === 'recusar') {
+              // No sistema atual, 'recusar' via notificação apenas silencia o alerta.
+              // Se fosse uma atribuição direta, poderíamos marcar como rejeitado.
+              console.log(`Motorista ${session.driverId} recusou a corrida ${orderId} via botão de ação.`);
+            }
+            // Limpa os parâmetros da URL para evitar repetição ao recarregar
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (e) {
+          console.error("Erro ao processar ação da notificação:", e);
+        }
+      }
+    }
+  }, [drivers, handleUpdateOrderStatus]);
   
   const handleCancelOrder = (orderId: string) => {
     const order = globalOrders.find(o => o.id === orderId);
