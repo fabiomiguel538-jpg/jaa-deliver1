@@ -12,6 +12,7 @@ const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [view, setView] = useState<'landing' | 'store-signup' | 'driver-signup'>('landing');
   
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -85,6 +86,18 @@ const App: React.FC = () => {
   const lastSyncTimeRef = useRef<number>(0);
   const isLoadingDataRef = useRef<boolean>(false);
 
+  const forceLogout = useCallback((message: string) => {
+    alert(message);
+    localStorage.clear();
+    sessionStorage.clear();
+    setRole(null);
+    setCurrentDriverId(null);
+    setCurrentStoreId(null);
+    setView('landing');
+    // Caso o app fosse migrado para rotas reais, aqui usariamos navigate('/login')
+    // Como é baseado em estado, resetar o role e view força a volta para o login.
+  }, []);
+
   const loadAllData = useCallback(async () => {
     if (isLoadingDataRef.current) return;
     
@@ -105,6 +118,23 @@ const App: React.FC = () => {
         dbService.getSettings()
       ]);
       
+      // SECURITY CHECK: Validação contínua de bloqueio (Forced Logout)
+      if (role === UserRole.DRIVER && currentDriverId) {
+        const me = d.find(drv => drv.id === currentDriverId);
+        if (me && me.isBlocked) {
+          forceLogout(`Sua conta foi bloqueada ou suspensa. Motivo: ${me.blockReason || 'Irregularidades'}.`);
+          return;
+        }
+      }
+
+      if (role === UserRole.STORE && currentStoreId) {
+        const me = s.find(st => st.id === currentStoreId);
+        if (me && me.isBlocked) {
+          forceLogout(`Seu estabelecimento foi bloqueado. Motivo: ${me.blockReason || 'Irregularidades'}.`);
+          return;
+        }
+      }
+
       // Verificamos novamente o timestamp antes de aplicar para evitar race conditions
       if (Date.now() - lastInternalUpdate.current < 3000) {
         return;
@@ -119,14 +149,20 @@ const App: React.FC = () => {
         setPlatformSettings(prev => ({ ...prev, ...settings }));
       }
       setLastSyncTime(new Date());
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao carregar dados do banco:", error);
+      
+      // Interceptador de erro de autenticação (401/403)
+      const errorMsg = error?.message?.toLowerCase() || "";
+      if (errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('unauthorized') || errorMsg.includes('forbidden')) {
+        forceLogout("Sua sessão expirou ou seu acesso foi revogado. Por favor, faça login novamente.");
+      }
     } finally {
       setIsSyncing(false); 
       setIsLoading(false);
       isLoadingDataRef.current = false;
     }
-  }, []);
+  }, [role, currentDriverId, currentStoreId, forceLogout]);
   
   const handleLogout = useCallback(() => { 
     setRole(null); 
@@ -202,18 +238,18 @@ const App: React.FC = () => {
   }, [loadAllData]);
   
   useEffect(() => {
-    // Configuração do intervalo de atualização automática para 15 segundos
-    const POLLING_INTERVAL = 15000; 
+    // Configuração do intervalo de atualização automática para 10 segundos (afrouxado para evitar ghosting)
+    const POLLING_INTERVAL = 10000; 
     
     const pollData = setInterval(() => {
-      // Só busca se a aba estiver visível e houver usuário logado
-      if (document.visibilityState === 'visible' && role && !isSyncing && (Date.now() - lastInternalUpdate.current > 5000)) {
+      // Só busca se a aba estiver visível, houver usuário logado e não houver processamento ativo
+      if (document.visibilityState === 'visible' && role && !isSyncing && !isProcessing && (Date.now() - lastInternalUpdate.current > 10000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);
 
     return () => clearInterval(pollData);
-  }, [role, isSyncing, loadAllData]);
+  }, [role, isSyncing, isProcessing, loadAllData]);
 
   const handleUpdateSettingsAndSave = (newSettings: PlatformSettings) => {
     setPlatformSettings(newSettings);
@@ -274,6 +310,9 @@ const App: React.FC = () => {
   };
   
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus, driverId?: string) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+
     // 1. SINCRONIA COM NOTIFICAÇÕES: Se o pedido não está no estado local, busca no banco (comum em notificações rápidas)
     let currentOrders = [...globalOrders];
     let orderToUpdate = currentOrders.find(o => o.id === orderId);
@@ -294,6 +333,7 @@ const App: React.FC = () => {
 
     if (!orderToUpdate) {
       console.warn(`Pedido ${orderId} não encontrado para atualização.`);
+      setIsProcessing(false);
       return;
     }
 
@@ -313,74 +353,78 @@ const App: React.FC = () => {
       orderGroupIds.has(o.id) ? { ...o, status, driverId: driverId || o.driverId } : o
     );
 
-    // Aplica a mudança localmente primeiro
+    // Aplica a mudança localmente primeiro para feedback visual imediato
     lastInternalUpdate.current = Date.now();
     setGlobalOrders(optimisticOrders);
 
-    try {
-      // 2. VALIDAÇÃO DE ACEITE (Somente se for ACCEPTED)
-      if (status === OrderStatus.ACCEPTED) {
-        let latestOrder = orderToUpdate;
-        
-        // Se não buscamos agora há pouco, precisamos buscar para validar o aceite concorrente
-        if (!fetchedLatest) {
-          const latestOrders = await dbService.getOrders();
-          const freshOrder = latestOrders.find(o => o.id === orderId);
+    // Atraso Intencional (Debounce Visual de 2.5s) para evitar corridas de dados com o Neon
+    setTimeout(async () => {
+      try {
+        // 2. VALIDAÇÃO DE ACEITE (Somente se for ACCEPTED)
+        if (status === OrderStatus.ACCEPTED) {
+          let latestOrder = orderToUpdate;
           
-          if (!freshOrder || freshOrder.status !== OrderStatus.SEARCHING) {
-            alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
-            setGlobalOrders(latestOrders);
-            return;
-          }
-          latestOrder = freshOrder;
-        } else {
-          // Se já buscamos e o status não era SEARCHING, reverte
-          if (orderToUpdate.status !== OrderStatus.SEARCHING) {
-            alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
-            setGlobalOrders(currentOrders);
-            return;
-          }
-        }
-      }
-
-      // 3. LÓGICA FINANCEIRA (Atômica no Banco)
-      if (status === OrderStatus.DELIVERED) {
-        let totalToCredit = 0;
-        let targetDriverId = driverId || orderToUpdate.driverId;
-        
-        if (targetDriverId) {
-          orderGroupIds.forEach(currentOrderId => {
-            const finishedOrder = optimisticOrders.find(o => o.id === currentOrderId);
-            // Só credita se o pedido não estava entregue e não tem taxa de retorno pendente
-            if (finishedOrder && previousOrders.find(po => po.id === currentOrderId)?.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
-              totalToCredit += (finishedOrder.driverEarning || 0);
+          // Se não buscamos agora há pouco, precisamos buscar para validar o aceite concorrente
+          if (!fetchedLatest) {
+            const latestOrders = await dbService.getOrders();
+            const freshOrder = latestOrders.find(o => o.id === orderId);
+            
+            if (!freshOrder || freshOrder.status !== OrderStatus.SEARCHING) {
+              alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
+              setGlobalOrders(latestOrders);
+              setIsProcessing(false);
+              return;
             }
-          });
-
-          if (totalToCredit > 0) {
-            await dbService.adjustDriverBalance(targetDriverId, totalToCredit);
+            latestOrder = freshOrder;
+          } else {
+            // Se já buscamos e o status não era SEARCHING, reverte
+            if (orderToUpdate.status !== OrderStatus.SEARCHING) {
+              alert('Poxa, outro motoboy foi mais rápido e pegou esta corrida!');
+              setGlobalOrders(currentOrders);
+              setIsProcessing(false);
+              return;
+            }
           }
         }
-      }
 
-      // 4. PERSISTÊNCIA NO BANCO (Em segundo plano e muito mais rápida)
-      const changedOrders = optimisticOrders.filter(o => orderGroupIds.has(o.id));
-      await dbService.updateOrders(changedOrders);
-      await dbService.saveOrders(optimisticOrders); // Garante persistência local completa e notificação entre abas
-      
-      // Atualiza o saldo dos drivers localmente se houve crédito
-      if (status === OrderStatus.DELIVERED) {
-        const d = await dbService.getDrivers();
-        setDrivers(d);
+        // 3. LÓGICA FINANCEIRA (Atômica no Banco)
+        if (status === OrderStatus.DELIVERED) {
+          let totalToCredit = 0;
+          let targetDriverId = driverId || orderToUpdate.driverId;
+          
+          if (targetDriverId) {
+            orderGroupIds.forEach(currentOrderId => {
+              const finishedOrder = optimisticOrders.find(o => o.id === currentOrderId);
+              // Só credita se o pedido não estava entregue e não tem taxa de retorno pendente
+              if (finishedOrder && previousOrders.find(po => po.id === currentOrderId)?.status !== OrderStatus.DELIVERED && !finishedOrder.hasReturnFee) {
+                totalToCredit += (finishedOrder.driverEarning || 0);
+              }
+            });
+
+            if (totalToCredit > 0) {
+              await dbService.adjustDriverBalance(targetDriverId, totalToCredit);
+            }
+          }
+        }
+
+        // 4. PERSISTÊNCIA NO BANCO
+        const changedOrders = optimisticOrders.filter(o => orderGroupIds.has(o.id));
+        await dbService.updateOrders(changedOrders);
+        await dbService.saveOrders(optimisticOrders); 
+        
+        if (status === OrderStatus.DELIVERED) {
+          const d = await dbService.getDrivers();
+          setDrivers(d);
+        }
+      } catch (error) {
+        console.error("Erro ao atualizar status:", error);
+        setGlobalOrders(previousOrders);
+        alert("Erro ao sincronizar status. Tente novamente.");
+      } finally {
+        setIsProcessing(false);
+        setIsSyncing(false);
       }
-    } catch (error) {
-      console.error("Erro ao atualizar status:", error);
-      // Reverte em caso de erro crítico
-      setGlobalOrders(previousOrders);
-      alert("Erro ao sincronizar status. Tente novamente.");
-    } finally {
-      setIsSyncing(false);
-    }
+    }, 2500);
   };
 
   // Processamento de comandos via URL (ex: cliques em notificações push com botões de ação)
@@ -736,7 +780,7 @@ const App: React.FC = () => {
         <div className="min-h-[100dvh]">
           {role === UserRole.STORE && ( currentStore && <StoreDashboard onLogout={handleLogout} orders={globalOrders.filter(o => o.storeId === currentStoreId)} onNewOrder={handleNewOrderFromStore} onCancelOrder={handleCancelOrder} onReleaseOrder={handleReleaseOrder} onRechargeRequest={handleNewRechargeRequest} profile={currentStore} settings={platformSettings} onlineDrivers={drivers.filter(d => d.isOnline)} onUpdateRadius={(radius) => handleUpdateStore(currentStoreId, { deliveryRadius: radius })} onAccessRequest={(id, type) => handleUpdateStore(id, { accessValidity: 0, accessRequestType: type, paymentProofUrl: 'AWAITING_ADMIN_APPROVAL' })} onUpdateProfile={handleUpdateStore} 
           onConfirmReturn={handleConfirmReturnRobust} onRefresh={loadAllData} isSyncing={isSyncing} /> )}
-          {role === UserRole.DRIVER && ( currentDriver && <DriverDashboard onLogout={handleLogout} availableOrders={globalOrders.filter(o => o.status === OrderStatus.SEARCHING)} scheduledOrders={globalOrders.filter(o => o.status === OrderStatus.SCHEDULED && o.storeCity?.toLowerCase().trim() === currentDriver?.city?.toLowerCase().trim())} activeOrders={globalOrders.filter(o => o.driverId === currentDriverId && ![OrderStatus.DELIVERED, OrderStatus.CANCELED].includes(o.status))} allOrders={globalOrders} onUpdateStatus={handleUpdateOrderStatus} onReportReturn={(orderId) => handleUpdateOrder(orderId, { driverReportedReturn: true })} balance={currentDriver.balance} profile={currentDriver} settings={platformSettings} withdrawalRequests={withdrawalRequests} onNewWithdrawalRequest={handleNewWithdrawalRequest} onToggleOnline={(id, online) => handleUpdateDriver(id, { isOnline: online })} onUpdateLocation={(id, loc) => handleUpdateDriver(id, { currentLocation: loc })} onUpdateProfile={handleUpdateDriver} onRefresh={loadAllData} isSyncing={isSyncing} /> )}
+          {role === UserRole.DRIVER && ( currentDriver && <DriverDashboard onLogout={handleLogout} availableOrders={globalOrders.filter(o => o.status === OrderStatus.SEARCHING)} scheduledOrders={globalOrders.filter(o => o.status === OrderStatus.SCHEDULED && o.storeCity?.toLowerCase().trim() === currentDriver?.city?.toLowerCase().trim())} activeOrders={globalOrders.filter(o => o.driverId === currentDriverId && ![OrderStatus.DELIVERED, OrderStatus.CANCELED].includes(o.status))} allOrders={globalOrders} onUpdateStatus={handleUpdateOrderStatus} isProcessing={isProcessing} onReportReturn={(orderId) => handleUpdateOrder(orderId, { driverReportedReturn: true })} balance={currentDriver.balance} profile={currentDriver} settings={platformSettings} withdrawalRequests={withdrawalRequests} onNewWithdrawalRequest={handleNewWithdrawalRequest} onToggleOnline={(id, online) => handleUpdateDriver(id, { isOnline: online })} onUpdateLocation={(id, loc) => handleUpdateDriver(id, { currentLocation: loc })} onUpdateProfile={handleUpdateDriver} onRefresh={loadAllData} isSyncing={isSyncing} /> )}
           {role === UserRole.ADMIN && ( <AdminDashboard onLogout={handleLogout} orders={globalOrders} settings={platformSettings} onUpdateSettings={handleUpdateSettingsAndSave} allDrivers={drivers} onApproveDriver={handleApproveDriver} onRejectDriver={handleRejectDriver} allStores={stores} onApproveStore={handleApproveStore} onRejectStore={handleRejectStore} onApproveAccess={handleApproveAccess} rechargeRequests={rechargeRequests} onApproveRecharge={handleApproveRecharge} onRejectRecharge={handleRejectRecharge} withdrawalRequests={withdrawalRequests} onApproveWithdrawal={handleApproveWithdrawal} onRejectWithdrawal={handleRejectWithdrawal} onApprovePayment={handleApprovePayment} onRejectPayment={handleRejectPayment} onUpdateDriver={handleUpdateDriver} onUpdateStore={handleUpdateStore} onResetStatistics={handleResetStatistics} isSyncing={isSyncing} lastSyncTime={lastSyncTime} onDeleteDriver={handleDeleteDriver} onDeleteStore={handleDeleteStore} onRefresh={loadAllData} /> )}
         </div>
       )}

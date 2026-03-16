@@ -495,10 +495,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h1 className="text-lg font-black tracking-tighter">JAADelivery</h1>
             <div className="flex flex-col gap-1 mt-1">
                 <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${lastSyncTime ? 'opacity-100' : 'opacity-0'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
-                    <span className={`text-[9px] font-black uppercase tracking-widest ${isCloudConnected ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {isCloudConnected ? 'Online' : 'Erro de Conexão'}
-                    </span>
+                    {isCloudConnected && (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">
+                            Online
+                        </span>
+                      </>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-[8px] text-gray-400 font-bold uppercase">

@@ -37,6 +37,7 @@ interface DriverDashboardProps {
   onUpdateProfile: (driverId: string, data: Partial<DriverProfile>) => void;
   onRefresh: () => void;
   isSyncing: boolean;
+  isProcessing?: boolean;
 }
 
 const formatDateTime = (timestamp: number) => {
@@ -54,7 +55,7 @@ alertSound.load();
 alertSound.loop = true; // Faz o som repetir até o motoboy agir
 
 const DriverDashboard: React.FC<DriverDashboardProps> = ({ 
-  onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing
+  onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing, isProcessing = false
 }) => {
   const isOnline = profile?.isOnline || false;
   const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied' | 'error' | 'loading'>('loading');
@@ -693,7 +694,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs">🔑</span>
                                         </div>
                                       )}
-                                      <button disabled={isUpdating} onClick={() => handleFinishDelivery(order)} className={`w-full bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-100 active:scale-95 transition-all text-[10px] uppercase tracking-widest ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>Finalizar Parada {idx + 1} ✓</button>
+                                      <button disabled={isUpdating || isProcessing} onClick={() => handleFinishDelivery(order)} className={`w-full bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-100 active:scale-95 transition-all text-[10px] uppercase tracking-widest ${(isUpdating || isProcessing) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        {isProcessing ? 'Processando...' : `Finalizar Parada ${idx + 1} ✓`}
+                                      </button>
                                   </div>
                                 )}
                             </div>
@@ -702,7 +705,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </div>
                     
                     {commonStatus !== OrderStatus.IN_TRANSIT && (
-                        <button disabled={isUpdating} onClick={handleGlobalStatusUpdate} className={`w-full jaa-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-red-100 active:scale-95 transition-all uppercase tracking-widest text-xs ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>{getStatusActionText(commonStatus)}</button>
+                        <button disabled={isUpdating || isProcessing} onClick={handleGlobalStatusUpdate} className={`w-full jaa-gradient text-white font-black py-5 rounded-2xl shadow-xl shadow-red-100 active:scale-95 transition-all uppercase tracking-widest text-xs ${(isUpdating || isProcessing) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          {isProcessing ? 'Processando...' : getStatusActionText(commonStatus)}
+                        </button>
                     )}
 
                     <div className="flex gap-2">
@@ -825,7 +830,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                   <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-white border-4 border-[#0085FF] rounded-full flex-shrink-0 mt-1 shadow-sm"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Coleta</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.pickup.address}</p></div></div>
                                   <div className="flex items-start gap-4 relative z-10"><div className="w-5 h-5 bg-[#F84F39] border-4 border-white rounded-full flex-shrink-0 mt-1 shadow-lg"></div><div className="space-y-0.5"><p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ponto de Entrega</p><p className="text-xs font-bold text-gray-700 leading-tight">{order.dropoff.address}</p></div></div>
                                 </div>
-                                <button disabled={isUpdating} onClick={async () => { if(isUpdating) return; setIsUpdating(true); try { await onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id); } catch(e) { setIsUpdating(false); } }} className={`w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}>ACEITAR ROTA AGORA 🛵</button>
+                                <button disabled={isUpdating || isProcessing} onClick={async () => { if(isUpdating || isProcessing) return; try { await onUpdateStatus(order.id, OrderStatus.ACCEPTED, profile.id); } catch(e) { } }} className={`w-full mt-6 bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-100 active:scale-95 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 ${(isUpdating || isProcessing) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                  {isProcessing ? 'Processando...' : 'ACEITAR ROTA AGORA 🛵'}
+                                </button>
                             </div>
                           );
                         })
