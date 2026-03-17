@@ -38,6 +38,7 @@ interface DriverDashboardProps {
   onRefresh: () => void;
   isSyncing: boolean;
   isProcessing?: boolean;
+  onRequestPushToken?: () => void;
 }
 
 const formatDateTime = (timestamp: number) => {
@@ -55,7 +56,7 @@ alertSound.load();
 alertSound.loop = true; // Faz o som repetir até o motoboy agir
 
 const DriverDashboard: React.FC<DriverDashboardProps> = ({ 
-  onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing, isProcessing = false
+  onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing, isProcessing = false, onRequestPushToken
 }) => {
   const isOnline = profile?.isOnline || false;
   const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied' | 'error' | 'loading'>('loading');
@@ -308,10 +309,45 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Efeito separado para permissões
+  // Efeito separado para permissões e solicitação de token WebView
   useEffect(() => {
     requestNotificationPermission();
+    if (onRequestPushToken) {
+      onRequestPushToken();
+    }
   }, []);
+
+  const sendTestNotification = async () => {
+    if (!profile.expoPushToken) {
+      alert("Token do Expo não encontrado. Certifique-se de estar no aplicativo e que o token foi capturado.");
+      return;
+    }
+
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: profile.expoPushToken,
+          title: "NOVO PEDIDO DISPONÍVEL! 🚀",
+          body: "Clique aqui para ver os detalhes da entrega.",
+          priority: "high",
+          sound: "default",
+          channelId: "default",
+        }),
+      });
+      const resData = await response.json();
+      console.log('Resposta do Expo:', resData);
+      alert("Solicitação de notificação enviada ao Expo!");
+    } catch (error) {
+      console.error('Erro ao enviar notificação de teste:', error);
+      alert("Erro ao enviar notificação.");
+    }
+  };
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
   useEffect(() => {
@@ -618,13 +654,23 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           </div>
         )}
 
-        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
-          <div className="flex justify-between items-center">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
-            <h3 className="text-3xl font-black text-gray-800">R$ {(balance || 0).toFixed(2)}</h3>
+          <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
+              <h3 className="text-3xl font-black text-gray-800">R$ {(balance || 0).toFixed(2)}</h3>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              <button onClick={() => setIsEditingProfile(true)} className="w-full bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">SOLICITAR SAQUE / CONFIGS</button>
+              {profile.expoPushToken && (
+                <button 
+                  onClick={sendTestNotification} 
+                  className="w-full bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <span>🔔</span> TESTAR NOTIFICAÇÃO DE PEDIDO
+                </button>
+              )}
+            </div>
           </div>
-          <button onClick={() => setIsEditingProfile(true)} className="w-full bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">SOLICITAR SAQUE / CONFIGS</button>
-        </div>
 
         {isRouteActive ? (
             <div className="bg-white rounded-[2.5rem] shadow-xl border-4 border-white overflow-hidden animate-in fade-in duration-300">

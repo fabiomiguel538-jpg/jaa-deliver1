@@ -8,6 +8,14 @@ import StoreRegistration from './components/StoreRegistration';
 import { dbService } from './services/database';
 import { APP_LOGO, LOGO_SVG_FALLBACK } from './constants';
 
+declare global {
+  interface Window {
+    ReactNativeWebView: {
+      postMessage: (message: string) => void;
+    };
+  }
+}
+
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -698,6 +706,39 @@ const App: React.FC = () => {
   const handleUpdateStore = createGenericDataHandler(setStores, dbService.saveStores);
   const handleUpdateOrder = createGenericDataHandler(setGlobalOrders, dbService.saveOrders);
 
+  // Lógica de Push Notifications via WebView (Expo)
+  const requestPushToken = useCallback(() => {
+    if (window.ReactNativeWebView) {
+      console.log('Solicitando Push Token ao WebView...');
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'GET_PUSH_TOKEN' }));
+    } else {
+      console.warn('WebView não detectado. Certifique-se de estar rodando dentro do aplicativo.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleMessage = (event: any) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'EXPO_PUSH_TOKEN' && data.token) {
+          console.log('Recebido Expo Push Token:', data.token);
+          if (role === UserRole.DRIVER && currentDriverId) {
+            handleUpdateDriver(currentDriverId, { expoPushToken: data.token });
+          }
+        }
+      } catch (e) {
+        // Ignora mensagens não-JSON
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    document.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      document.removeEventListener('message', handleMessage);
+    };
+  }, [role, currentDriverId, handleUpdateDriver]);
+
   // NOVO FLUXO DE RETORNO BLINDADO
   const handleConfirmReturnRobust = async (orderId: string) => {
     const order = globalOrders.find(o => o.id === orderId); 
@@ -780,7 +821,7 @@ const App: React.FC = () => {
         <div className="min-h-[100dvh]">
           {role === UserRole.STORE && ( currentStore && <StoreDashboard onLogout={handleLogout} orders={globalOrders.filter(o => o.storeId === currentStoreId)} onNewOrder={handleNewOrderFromStore} onCancelOrder={handleCancelOrder} onReleaseOrder={handleReleaseOrder} onRechargeRequest={handleNewRechargeRequest} profile={currentStore} settings={platformSettings} onlineDrivers={drivers.filter(d => d.isOnline)} onUpdateRadius={(radius) => handleUpdateStore(currentStoreId, { deliveryRadius: radius })} onAccessRequest={(id, type) => handleUpdateStore(id, { accessValidity: 0, accessRequestType: type, paymentProofUrl: 'AWAITING_ADMIN_APPROVAL' })} onUpdateProfile={handleUpdateStore} 
           onConfirmReturn={handleConfirmReturnRobust} onRefresh={loadAllData} isSyncing={isSyncing} /> )}
-          {role === UserRole.DRIVER && ( currentDriver && <DriverDashboard onLogout={handleLogout} availableOrders={globalOrders.filter(o => o.status === OrderStatus.SEARCHING)} scheduledOrders={globalOrders.filter(o => o.status === OrderStatus.SCHEDULED && o.storeCity?.toLowerCase().trim() === currentDriver?.city?.toLowerCase().trim())} activeOrders={globalOrders.filter(o => o.driverId === currentDriverId && ![OrderStatus.DELIVERED, OrderStatus.CANCELED].includes(o.status))} allOrders={globalOrders} onUpdateStatus={handleUpdateOrderStatus} isProcessing={isProcessing} onReportReturn={(orderId) => handleUpdateOrder(orderId, { driverReportedReturn: true })} balance={currentDriver.balance} profile={currentDriver} settings={platformSettings} withdrawalRequests={withdrawalRequests} onNewWithdrawalRequest={handleNewWithdrawalRequest} onToggleOnline={(id, online) => handleUpdateDriver(id, { isOnline: online })} onUpdateLocation={(id, loc) => handleUpdateDriver(id, { currentLocation: loc })} onUpdateProfile={handleUpdateDriver} onRefresh={loadAllData} isSyncing={isSyncing} /> )}
+          {role === UserRole.DRIVER && ( currentDriver && <DriverDashboard onLogout={handleLogout} availableOrders={globalOrders.filter(o => o.status === OrderStatus.SEARCHING)} scheduledOrders={globalOrders.filter(o => o.status === OrderStatus.SCHEDULED && o.storeCity?.toLowerCase().trim() === currentDriver?.city?.toLowerCase().trim())} activeOrders={globalOrders.filter(o => o.driverId === currentDriverId && ![OrderStatus.DELIVERED, OrderStatus.CANCELED].includes(o.status))} allOrders={globalOrders} onUpdateStatus={handleUpdateOrderStatus} isProcessing={isProcessing} onReportReturn={(orderId) => handleUpdateOrder(orderId, { driverReportedReturn: true })} balance={currentDriver.balance} profile={currentDriver} settings={platformSettings} withdrawalRequests={withdrawalRequests} onNewWithdrawalRequest={handleNewWithdrawalRequest} onToggleOnline={(id, online) => handleUpdateDriver(id, { isOnline: online })} onUpdateLocation={(id, loc) => handleUpdateDriver(id, { currentLocation: loc })} onUpdateProfile={handleUpdateDriver} onRefresh={loadAllData} isSyncing={isSyncing} onRequestPushToken={requestPushToken} /> )}
           {role === UserRole.ADMIN && ( <AdminDashboard onLogout={handleLogout} orders={globalOrders} settings={platformSettings} onUpdateSettings={handleUpdateSettingsAndSave} allDrivers={drivers} onApproveDriver={handleApproveDriver} onRejectDriver={handleRejectDriver} allStores={stores} onApproveStore={handleApproveStore} onRejectStore={handleRejectStore} onApproveAccess={handleApproveAccess} rechargeRequests={rechargeRequests} onApproveRecharge={handleApproveRecharge} onRejectRecharge={handleRejectRecharge} withdrawalRequests={withdrawalRequests} onApproveWithdrawal={handleApproveWithdrawal} onRejectWithdrawal={handleRejectWithdrawal} onApprovePayment={handleApprovePayment} onRejectPayment={handleRejectPayment} onUpdateDriver={handleUpdateDriver} onUpdateStore={handleUpdateStore} onResetStatistics={handleResetStatistics} isSyncing={isSyncing} lastSyncTime={lastSyncTime} onDeleteDriver={handleDeleteDriver} onDeleteStore={handleDeleteStore} onRefresh={loadAllData} /> )}
         </div>
       )}
