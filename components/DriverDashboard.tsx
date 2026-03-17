@@ -196,6 +196,11 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const handleToggleOnlineStatus = async () => {
     const nextStatus = !isOnline;
     if (nextStatus) {
+      // Solicita permissão ao aplicativo via WebView
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
+      }
+      
       await requestNotificationPermission();
       // "Prime" o áudio para permitir autoplay posterior
       alertSound.play().then(() => {

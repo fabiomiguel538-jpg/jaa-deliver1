@@ -720,6 +720,17 @@ const App: React.FC = () => {
     const handleMessage = (event: any) => {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        
+        // Novo handler solicitado pelo usuário
+        if (data.type === 'TOKEN_RECEBIDO' && data.token) {
+          console.log('Recebido Token do App:', data.token);
+          if (role === UserRole.DRIVER && currentDriverId) {
+            handleUpdateDriver(currentDriverId, { expoPushToken: data.token });
+            alert('Notificações ativadas com sucesso!');
+          }
+        }
+
+        // Mantendo compatibilidade com o tipo anterior se necessário
         if (data.type === 'EXPO_PUSH_TOKEN' && data.token) {
           console.log('Recebido Expo Push Token:', data.token);
           if (role === UserRole.DRIVER && currentDriverId) {
