@@ -727,7 +727,20 @@ const App: React.FC = () => {
       });
       
       try {
-        const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        let message;
+        if (typeof event.data === 'string') {
+          try {
+            message = JSON.parse(event.data);
+          } catch (e) {
+            // Se não for JSON, pode ser o token direto em alguns casos
+            console.log('App: Mensagem não é JSON, verificando se é token direto');
+            if (event.data.length > 20) {
+              message = { type: 'TOKEN_RECEBIDO', token: event.data };
+            }
+          }
+        } else {
+          message = event.data;
+        }
         
         if (message && message.type === 'TOKEN_RECEBIDO' && message.token) {
           console.log("App: Token recebido do App:", message.token);
@@ -739,6 +752,7 @@ const App: React.FC = () => {
             
             // Persistência local imediata para evitar que o botão volte a aparecer
             localStorage.setItem(`jaa_notifications_${currentDriverId}`, 'granted');
+            localStorage.setItem(`jaa_push_token_${currentDriverId}`, message.token);
             
             // ATUALIZAR UI:
             alert('✅ Notificações Ativas com sucesso!');
@@ -752,6 +766,7 @@ const App: React.FC = () => {
           if (role === UserRole.DRIVER && currentDriverId) {
             handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
             localStorage.setItem(`jaa_notifications_${currentDriverId}`, 'granted');
+            localStorage.setItem(`jaa_push_token_${currentDriverId}`, message.token);
           }
         }
       } catch (e) {

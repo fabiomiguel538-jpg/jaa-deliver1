@@ -70,15 +70,19 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   // Sincroniza status de notificação com o token recebido e persiste no localStorage
   useEffect(() => {
+    const localToken = localStorage.getItem(`jaa_push_token_${profile?.id}`);
+    const effectiveToken = profile.expoPushToken || profile.fcmToken || localToken;
+
     console.log('DriverDashboard: Perfil atualizado', { 
       expoPushToken: profile.expoPushToken, 
       fcmToken: profile.fcmToken,
+      localToken,
       id: profile.id 
     });
     
-    if (profile.expoPushToken || profile.fcmToken) {
+    if (effectiveToken) {
       setNotificationStatus('granted');
-      setFcmToken(profile.expoPushToken || profile.fcmToken || null);
+      setFcmToken(effectiveToken);
       setIsActivating(false);
       localStorage.setItem(`jaa_notifications_${profile?.id}`, 'granted');
     } else {
@@ -89,6 +93,30 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       }
     }
   }, [profile.expoPushToken, profile.fcmToken, profile?.id]);
+  // Tenta ativação automática de notificações ao entrar no dashboard
+  useEffect(() => {
+    if (window.ReactNativeWebView && !profile.expoPushToken && !profile.fcmToken) {
+      const lastAutoRequest = sessionStorage.getItem('last_auto_push_request');
+      const now = Date.now();
+      
+      // Evita loop infinito de requests (espera 60s entre tentativas automáticas)
+      if (!lastAutoRequest || (now - parseInt(lastAutoRequest)) > 60000) {
+        console.log('DriverDashboard: Tentando ativação automática de notificações...');
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'GET_PUSH_TOKEN' }));
+        sessionStorage.setItem('last_auto_push_request', now.toString());
+        setIsActivating(true);
+        
+        // Timeout de segurança para o estado visual
+        setTimeout(() => {
+          const hasToken = localStorage.getItem(`jaa_notifications_${profile?.id}`) === 'granted';
+          if (!hasToken && !profile.expoPushToken) {
+            setIsActivating(false);
+          }
+        }, 15000);
+      }
+    }
+  }, [profile.expoPushToken, profile.fcmToken, profile?.id]);
+
   const isRouteActive = activeOrders.length > 0;
   const isMultiRoute = activeOrders.length > 1;
   const commonStatus = activeOrders[0]?.status || OrderStatus.SEARCHING;
@@ -1014,16 +1042,17 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
-                                (notificationStatus === 'granted' || !!profile.expoPushToken) ? 'bg-green-50 text-green-600' : 
+                                (notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? 'bg-green-50 text-green-600' : 
                                 notificationStatus === 'denied' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
                               }`}>
-                                {(notificationStatus === 'granted' || !!profile.expoPushToken) ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
+                                {(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
                               </div>
                               <div>
                                 <h4 className="text-sm font-bold text-gray-900">Status de Notificações</h4>
                                 <p className="text-[10px] text-gray-500">
-                                  {(notificationStatus === 'granted' || !!profile.expoPushToken) ? 'Configurado corretamente' : 
-                                   notificationStatus === 'denied' ? 'Bloqueado no navegador' : 'Aguardando ativação'}
+                                  {(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? 'Ativo o tempo todo' : 
+                                   notificationStatus === 'denied' ? 'Bloqueado no navegador' : 
+                                   isActivating ? 'Ativando automaticamente...' : 'Aguardando ativação'}
                                 </p>
                                 <button 
                                   onClick={() => onRefresh()} 
@@ -1036,7 +1065,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                 </button>
                               </div>
                             </div>
-                            {!(notificationStatus === 'granted' || !!profile.expoPushToken) && (
+                            {!(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
                               <button 
                                 onClick={() => {
                                   if (window.ReactNativeWebView) {
@@ -1079,7 +1108,40 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                 Simular Token (Dev Only)
                               </button>
                             )}
+                            {profile.email === 'fabiomiguel538@gmail.com' && (
+                              <div className="mt-2 flex gap-1">
+                                <input 
+                                  id="manual-token"
+                                  type="text" 
+                                  placeholder="Token Manual" 
+                                  className="text-[8px] px-1 py-0.5 border rounded flex-1"
+                                />
+                                <button 
+                                  onClick={() => {
+                                    const val = (document.getElementById('manual-token') as HTMLInputElement).value;
+                                    // @ts-ignore
+                                    if (window.receiveToken && val) window.receiveToken(val);
+                                  }}
+                                  className="text-[8px] bg-gray-200 px-1 rounded"
+                                >
+                                  OK
+                                </button>
+                              </div>
+                            )}
                           </div>
+
+                          {!(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
+                            <div className="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                              <h5 className="text-[10px] font-bold text-blue-800 uppercase mb-1">Problemas com o sinal?</h5>
+                              <p className="text-[9px] text-blue-600 leading-relaxed">
+                                Se o sinal não chegar automaticamente, certifique-se de que o seu App Android está configurado para enviar o token. 
+                                O App deve executar este comando no WebView:
+                                <code className="block mt-1 p-1 bg-white rounded border border-blue-200 text-[8px] font-mono">
+                                  window.receiveToken("TOKEN_DO_DISPOSITIVO");
+                                </code>
+                              </p>
+                            </div>
+                          )}
 
                           {notificationStatus === 'granted' && (
                             <div className="pt-2 border-t border-gray-50">
