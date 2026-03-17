@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { UserRole, Order, OrderStatus, DriverProfile, DriverRegistrationStatus, StoreProfile, StoreRegistrationStatus, Location, RechargeRequest, RechargeRequestStatus, PlatformSettings, WithdrawalRequest, WithdrawalRequestStatus } from './types';
 import StoreDashboard from './components/StoreDashboard';
 import DriverDashboard from './components/DriverDashboard';
@@ -84,6 +84,7 @@ const App: React.FC = () => {
     saver: (data: T[]) => Promise<void>,
     update: (prev: T[]) => T[]
   ) => {
+    lastInternalUpdate.current = Date.now(); // Marca que houve uma atualização interna
     setter(prev => {
       const newState = update(prev);
       saver(newState);
@@ -144,7 +145,8 @@ const App: React.FC = () => {
       }
 
       // Verificamos novamente o timestamp antes de aplicar para evitar race conditions
-      if (Date.now() - lastInternalUpdate.current < 3000) {
+      // Se houve uma atualização interna recente (como salvar um token), aguardamos mais tempo
+      if (Date.now() - lastInternalUpdate.current < 8000) {
         return;
       }
 
@@ -702,9 +704,9 @@ const App: React.FC = () => {
     driverId: o.preAssignedDriverId 
   }));
   const handleRejectPayment = createGenericHandler(setGlobalOrders, dbService.saveOrders, o => ({ ...o, status: OrderStatus.CANCELED }));
-  const handleUpdateDriver = createGenericDataHandler(setDrivers, dbService.saveDrivers);
-  const handleUpdateStore = createGenericDataHandler(setStores, dbService.saveStores);
-  const handleUpdateOrder = createGenericDataHandler(setGlobalOrders, dbService.saveOrders);
+  const handleUpdateDriver = useMemo(() => createGenericDataHandler(setDrivers, dbService.saveDrivers), [setDrivers]);
+  const handleUpdateStore = useMemo(() => createGenericDataHandler(setStores, dbService.saveStores), [setStores]);
+  const handleUpdateOrder = useMemo(() => createGenericDataHandler(setGlobalOrders, dbService.saveOrders), [setGlobalOrders]);
 
   // Lógica de Push Notifications via WebView (Expo)
   const requestPushToken = useCallback(() => {
@@ -718,14 +720,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleMessage = (event: any) => {
+      console.log('App: Mensagem recebida do WebView', {
+        data: event.data,
+        origin: event.origin,
+        source: event.source ? 'Tem source' : 'Sem source'
+      });
+      
       try {
         const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         
-        if (message.type === 'TOKEN_RECEBIDO' && message.token) {
-          console.log("Token recebido do App:", message.token);
+        if (message && message.type === 'TOKEN_RECEBIDO' && message.token) {
+          console.log("App: Token recebido do App:", message.token);
           
           // SALVAR NO BANCO:
           if (role === UserRole.DRIVER && currentDriverId) {
+            console.log("App: Atualizando driver com token", currentDriverId);
             handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
             
             // Persistência local imediata para evitar que o botão volte a aparecer
@@ -733,6 +742,8 @@ const App: React.FC = () => {
             
             // ATUALIZAR UI:
             alert('✅ Notificações Ativas com sucesso!');
+          } else {
+            console.warn("App: Token recebido mas role ou id inválidos", { role, currentDriverId });
           }
         }
 
@@ -750,9 +761,25 @@ const App: React.FC = () => {
 
     window.addEventListener('message', handleMessage);
     document.addEventListener('message', handleMessage);
+    
+    // Para Android WebView, às vezes a mensagem vem via window.onMessage
+    // @ts-ignore
+    window.onMessage = handleMessage;
+    
+    // Função global para o App chamar diretamente se necessário
+    // @ts-ignore
+    window.receiveToken = (token: string) => {
+      console.log("App: receiveToken chamado diretamente pelo App", token);
+      handleMessage({ data: JSON.stringify({ type: 'TOKEN_RECEBIDO', token }) });
+    };
+
     return () => {
       window.removeEventListener('message', handleMessage);
       document.removeEventListener('message', handleMessage);
+      // @ts-ignore
+      delete window.onMessage;
+      // @ts-ignore
+      delete window.receiveToken;
     };
   }, [role, currentDriverId, handleUpdateDriver]);
 

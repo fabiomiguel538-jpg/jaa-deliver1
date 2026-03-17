@@ -70,11 +70,23 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   // Sincroniza status de notificação com o token recebido e persiste no localStorage
   useEffect(() => {
+    console.log('DriverDashboard: Perfil atualizado', { 
+      expoPushToken: profile.expoPushToken, 
+      fcmToken: profile.fcmToken,
+      id: profile.id 
+    });
+    
     if (profile.expoPushToken || profile.fcmToken) {
       setNotificationStatus('granted');
       setFcmToken(profile.expoPushToken || profile.fcmToken || null);
       setIsActivating(false);
       localStorage.setItem(`jaa_notifications_${profile?.id}`, 'granted');
+    } else {
+      // Se não tem no banco, mas tem no localStorage, talvez estejamos aguardando sincronia
+      const saved = localStorage.getItem(`jaa_notifications_${profile?.id}`);
+      if (saved === 'granted') {
+        setNotificationStatus('granted');
+      }
     }
   }, [profile.expoPushToken, profile.fcmToken, profile?.id]);
   const isRouteActive = activeOrders.length > 0;
@@ -1013,21 +1025,38 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                   {(notificationStatus === 'granted' || !!profile.expoPushToken) ? 'Configurado corretamente' : 
                                    notificationStatus === 'denied' ? 'Bloqueado no navegador' : 'Aguardando ativação'}
                                 </p>
+                                <button 
+                                  onClick={() => onRefresh()} 
+                                  className="text-[9px] text-orange-500 font-bold uppercase mt-1 flex items-center gap-1"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-2.5 w-2.5 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                  Sincronizar
+                                </button>
                               </div>
                             </div>
                             {!(notificationStatus === 'granted' || !!profile.expoPushToken) && (
                               <button 
                                 onClick={() => {
                                   if (window.ReactNativeWebView) {
+                                    console.log('Solicitando permissão via WebView...');
                                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
                                     setIsActivating(true);
-                                    // Timeout de segurança para resetar o loading se o app não responder
-                                    // Mas se já tivermos o token no localStorage, nem mostramos o botão
+                                    
+                                    // Timeout mais longo para dar tempo ao usuário de aceitar no sistema
+                                    // Se em 30 segundos não chegar o token, voltamos ao estado inicial
                                     setTimeout(() => {
-                                      if (!profile.expoPushToken) {
+                                      console.log('DriverDashboard: Verificando timeout de ativação...');
+                                      // Só reseta se ainda não tivermos o token
+                                      const hasToken = localStorage.getItem(`jaa_notifications_${profile?.id}`) === 'granted';
+                                      if (!hasToken && !profile.expoPushToken) {
+                                        console.warn('DriverDashboard: Timeout atingido sem receber token.');
                                         setIsActivating(false);
+                                      } else {
+                                        console.log('DriverDashboard: Token detectado, ignorando timeout.');
                                       }
-                                    }, 8000);
+                                    }, 30000);
                                   } else {
                                     alert('Este recurso só funciona dentro do aplicativo oficial do motoboy.');
                                   }
@@ -1036,7 +1065,18 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                 type="button"
                                 className={`px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm active:scale-95 transition-all ${isActivating ? 'opacity-50 cursor-not-allowed' : ''}`}
                               >
-                                {isActivating ? 'PROCESSANDO...' : 'ATIVAR'}
+                                {isActivating ? 'AGUARDANDO APP...' : 'ATIVAR'}
+                              </button>
+                            )}
+                            {profile.email === 'fabiomiguel538@gmail.com' && (
+                              <button 
+                                onClick={() => {
+                                  // @ts-ignore
+                                  if (window.receiveToken) window.receiveToken('SIMULATED_TOKEN_' + Date.now());
+                                }}
+                                className="mt-2 text-[8px] text-gray-300 block"
+                              >
+                                Simular Token (Dev Only)
                               </button>
                             )}
                           </div>
