@@ -60,7 +60,18 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 }) => {
   const isOnline = profile?.isOnline || false;
   const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied' | 'error' | 'loading'>('loading');
-  const [fcmToken, setFcmToken] = useState<string | null>(profile.fcmToken || null);
+  const [fcmToken, setFcmToken] = useState<string | null>(profile.expoPushToken || profile.fcmToken || null);
+
+  const [isActivating, setIsActivating] = useState(false);
+
+  // Sincroniza status de notificação com o token recebido
+  useEffect(() => {
+    if (profile.expoPushToken || profile.fcmToken) {
+      setNotificationStatus('granted');
+      setFcmToken(profile.expoPushToken || profile.fcmToken || null);
+      setIsActivating(false);
+    }
+  }, [profile.expoPushToken, profile.fcmToken]);
   const isRouteActive = activeOrders.length > 0;
   const isMultiRoute = activeOrders.length > 1;
   const commonStatus = activeOrders[0]?.status || OrderStatus.SEARCHING;
@@ -985,26 +996,36 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
-                                notificationStatus === 'granted' ? 'bg-green-50 text-green-600' : 
+                                (notificationStatus === 'granted' || !!profile.expoPushToken) ? 'bg-green-50 text-green-600' : 
                                 notificationStatus === 'denied' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
                               }`}>
-                                {notificationStatus === 'granted' ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
+                                {(notificationStatus === 'granted' || !!profile.expoPushToken) ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
                               </div>
                               <div>
                                 <h4 className="text-sm font-bold text-gray-900">Status de Notificações</h4>
                                 <p className="text-[10px] text-gray-500">
-                                  {notificationStatus === 'granted' ? 'Configurado corretamente' : 
-                                   notificationStatus === 'denied' ? 'Bloqueado no navegador' : 'Aguardando permissão'}
+                                  {(notificationStatus === 'granted' || !!profile.expoPushToken) ? 'Configurado corretamente' : 
+                                   notificationStatus === 'denied' ? 'Bloqueado no navegador' : 'Aguardando ativação'}
                                 </p>
                               </div>
                             </div>
-                            {notificationStatus !== 'granted' && (
+                            {!(notificationStatus === 'granted' || !!profile.expoPushToken) && (
                               <button 
-                                onClick={requestNotificationPermission}
+                                onClick={() => {
+                                  setIsActivating(true);
+                                  if (window.ReactNativeWebView) {
+                                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
+                                  } else {
+                                    requestNotificationPermission().finally(() => setIsActivating(false));
+                                  }
+                                  // Timeout de segurança para resetar o loading se o app não responder
+                                  setTimeout(() => setIsActivating(false), 5000);
+                                }}
+                                disabled={isActivating}
                                 type="button"
-                                className="px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm"
+                                className={`px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm active:scale-95 transition-all ${isActivating ? 'opacity-50' : ''}`}
                               >
-                                ATIVAR
+                                {isActivating ? '...' : 'ATIVAR'}
                               </button>
                             )}
                           </div>
