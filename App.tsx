@@ -719,26 +719,26 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleMessage = (event: any) => {
       try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         
-        // Novo handler solicitado pelo usuário
-        if (data.type === 'TOKEN_RECEBIDO' && data.token) {
-          console.log('Recebido Token do App:', data.token);
+        if (message.type === 'TOKEN_RECEBIDO' && message.token) {
+          console.log("Token recebido do App:", message.token);
+          // SALVAR NO BANCO:
           if (role === UserRole.DRIVER && currentDriverId) {
-            handleUpdateDriver(currentDriverId, { expoPushToken: data.token });
-            alert('Notificações ativadas com sucesso!');
+            handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
+            // ATUALIZAR UI:
+            alert('✅ Notificações Ativas com sucesso!');
           }
         }
 
-        // Mantendo compatibilidade com o tipo anterior se necessário
-        if (data.type === 'EXPO_PUSH_TOKEN' && data.token) {
-          console.log('Recebido Expo Push Token:', data.token);
+        // Compatibilidade com outros tipos se necessário
+        if (message.type === 'EXPO_PUSH_TOKEN' && message.token) {
           if (role === UserRole.DRIVER && currentDriverId) {
-            handleUpdateDriver(currentDriverId, { expoPushToken: data.token });
+            handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
           }
         }
       } catch (e) {
-        // Ignora mensagens não-JSON
+        // Mensagem não é um JSON, ignorar
       }
     };
 

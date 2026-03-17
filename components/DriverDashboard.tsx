@@ -212,7 +212,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
       }
       
-      await requestNotificationPermission();
       // "Prime" o áudio para permitir autoplay posterior
       alertSound.play().then(() => {
         alertSound.pause();
@@ -327,7 +326,9 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   // Efeito separado para permissões e solicitação de token WebView
   useEffect(() => {
-    requestNotificationPermission();
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
+    }
     if (onRequestPushToken) {
       onRequestPushToken();
     }
@@ -1012,14 +1013,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                             {!(notificationStatus === 'granted' || !!profile.expoPushToken) && (
                               <button 
                                 onClick={() => {
-                                  setIsActivating(true);
                                   if (window.ReactNativeWebView) {
                                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
+                                    setIsActivating(true);
+                                    // Timeout de segurança para resetar o loading se o app não responder
+                                    setTimeout(() => setIsActivating(false), 5000);
                                   } else {
-                                    requestNotificationPermission().finally(() => setIsActivating(false));
+                                    alert('Este recurso só funciona dentro do aplicativo oficial do motoboy.');
                                   }
-                                  // Timeout de segurança para resetar o loading se o app não responder
-                                  setTimeout(() => setIsActivating(false), 5000);
                                 }}
                                 disabled={isActivating}
                                 type="button"
