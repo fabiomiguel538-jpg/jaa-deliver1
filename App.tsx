@@ -723,9 +723,14 @@ const App: React.FC = () => {
         
         if (message.type === 'TOKEN_RECEBIDO' && message.token) {
           console.log("Token recebido do App:", message.token);
+          
           // SALVAR NO BANCO:
           if (role === UserRole.DRIVER && currentDriverId) {
             handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
+            
+            // Persistência local imediata para evitar que o botão volte a aparecer
+            localStorage.setItem(`jaa_notifications_${currentDriverId}`, 'granted');
+            
             // ATUALIZAR UI:
             alert('✅ Notificações Ativas com sucesso!');
           }
@@ -735,6 +740,7 @@ const App: React.FC = () => {
         if (message.type === 'EXPO_PUSH_TOKEN' && message.token) {
           if (role === UserRole.DRIVER && currentDriverId) {
             handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
+            localStorage.setItem(`jaa_notifications_${currentDriverId}`, 'granted');
           }
         }
       } catch (e) {

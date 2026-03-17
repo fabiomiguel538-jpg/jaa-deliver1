@@ -59,19 +59,24 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   onLogout, availableOrders = [], scheduledOrders = [], activeOrders = [], allOrders = [], onUpdateStatus, onReportReturn, balance = 0, profile, settings, withdrawalRequests = [], onNewWithdrawalRequest, onToggleOnline, onUpdateLocation, onUpdateProfile, onRefresh, isSyncing, isProcessing = false, onRequestPushToken
 }) => {
   const isOnline = profile?.isOnline || false;
-  const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied' | 'error' | 'loading'>('loading');
+  const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied' | 'error' | 'loading'>(() => {
+    // Tenta recuperar do localStorage para estado imediato
+    const saved = localStorage.getItem(`jaa_notifications_${profile?.id}`);
+    return (saved as any) || 'loading';
+  });
   const [fcmToken, setFcmToken] = useState<string | null>(profile.expoPushToken || profile.fcmToken || null);
 
   const [isActivating, setIsActivating] = useState(false);
 
-  // Sincroniza status de notificação com o token recebido
+  // Sincroniza status de notificação com o token recebido e persiste no localStorage
   useEffect(() => {
     if (profile.expoPushToken || profile.fcmToken) {
       setNotificationStatus('granted');
       setFcmToken(profile.expoPushToken || profile.fcmToken || null);
       setIsActivating(false);
+      localStorage.setItem(`jaa_notifications_${profile?.id}`, 'granted');
     }
-  }, [profile.expoPushToken, profile.fcmToken]);
+  }, [profile.expoPushToken, profile.fcmToken, profile?.id]);
   const isRouteActive = activeOrders.length > 0;
   const isMultiRoute = activeOrders.length > 1;
   const commonStatus = activeOrders[0]?.status || OrderStatus.SEARCHING;
@@ -1017,16 +1022,21 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
                                     setIsActivating(true);
                                     // Timeout de segurança para resetar o loading se o app não responder
-                                    setTimeout(() => setIsActivating(false), 5000);
+                                    // Mas se já tivermos o token no localStorage, nem mostramos o botão
+                                    setTimeout(() => {
+                                      if (!profile.expoPushToken) {
+                                        setIsActivating(false);
+                                      }
+                                    }, 8000);
                                   } else {
                                     alert('Este recurso só funciona dentro do aplicativo oficial do motoboy.');
                                   }
                                 }}
                                 disabled={isActivating}
                                 type="button"
-                                className={`px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm active:scale-95 transition-all ${isActivating ? 'opacity-50' : ''}`}
+                                className={`px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm active:scale-95 transition-all ${isActivating ? 'opacity-50 cursor-not-allowed' : ''}`}
                               >
-                                {isActivating ? '...' : 'ATIVAR'}
+                                {isActivating ? 'PROCESSANDO...' : 'ATIVAR'}
                               </button>
                             )}
                           </div>
