@@ -718,7 +718,50 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Refs para acessar estado atual dentro de funções globais
+  const roleRef = useRef(role);
+  const currentDriverIdRef = useRef(currentDriverId);
+  const handleUpdateDriverRef = useRef(handleUpdateDriver);
+
   useEffect(() => {
+    roleRef.current = role;
+    currentDriverIdRef.current = currentDriverId;
+    handleUpdateDriverRef.current = handleUpdateDriver;
+  }, [role, currentDriverId, handleUpdateDriver]);
+
+  useEffect(() => {
+    // Definir a função globalmente UMA ÚNICA VEZ
+    // @ts-ignore
+    if (!window.receiveToken) {
+      // @ts-ignore
+      window.receiveToken = (token: string) => {
+        console.log("App: receiveToken chamado diretamente pelo App (Global)", token);
+        
+        // Salva no localStorage global para que qualquer componente veja
+        localStorage.setItem('jaa_latest_push_token', token);
+        
+        const currentRole = roleRef.current;
+        const driverId = currentDriverIdRef.current;
+        const updateDriver = handleUpdateDriverRef.current;
+
+        if (currentRole === UserRole.DRIVER && driverId) {
+          console.log("App: Atualizando driver com token", driverId);
+          updateDriver(driverId, { expoPushToken: token, fcmToken: token });
+          
+          // Persistência local imediata
+          localStorage.setItem(`jaa_notifications_${driverId}`, 'granted');
+          localStorage.setItem(`jaa_push_token_${driverId}`, token);
+          
+          // Dispara evento para atualizar a UI imediatamente
+          window.dispatchEvent(new CustomEvent('tokenReceived', { detail: { token } }));
+          
+          alert('✅ Notificações Ativas com sucesso!');
+        } else {
+          console.warn("App: Token recebido mas role ou id inválidos. O token foi salvo localmente para quando o login for concluído.", { currentRole, driverId });
+        }
+      };
+    }
+
     const handleMessage = (event: any) => {
       console.log('App: Mensagem recebida do WebView', {
         data: event.data,
@@ -732,7 +775,6 @@ const App: React.FC = () => {
           try {
             message = JSON.parse(event.data);
           } catch (e) {
-            // Se não for JSON, pode ser o token direto em alguns casos
             console.log('App: Mensagem não é JSON, verificando se é token direto');
             if (event.data.length > 20) {
               message = { type: 'TOKEN_RECEBIDO', token: event.data };
@@ -743,60 +785,35 @@ const App: React.FC = () => {
         }
         
         if (message && message.type === 'TOKEN_RECEBIDO' && message.token) {
-          console.log("App: Token recebido do App:", message.token);
-          
-          // SALVAR NO BANCO:
-          if (role === UserRole.DRIVER && currentDriverId) {
-            console.log("App: Atualizando driver com token", currentDriverId);
-            handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
-            
-            // Persistência local imediata para evitar que o botão volte a aparecer
-            localStorage.setItem(`jaa_notifications_${currentDriverId}`, 'granted');
-            localStorage.setItem(`jaa_push_token_${currentDriverId}`, message.token);
-            
-            // ATUALIZAR UI:
-            alert('✅ Notificações Ativas com sucesso!');
-          } else {
-            console.warn("App: Token recebido mas role ou id inválidos", { role, currentDriverId });
-          }
+          // Reutiliza a função global para garantir a mesma lógica
+          // @ts-ignore
+          if (window.receiveToken) window.receiveToken(message.token);
         }
 
-        // Compatibilidade com outros tipos se necessário
-        if (message.type === 'EXPO_PUSH_TOKEN' && message.token) {
-          if (role === UserRole.DRIVER && currentDriverId) {
-            handleUpdateDriver(currentDriverId, { expoPushToken: message.token });
-            localStorage.setItem(`jaa_notifications_${currentDriverId}`, 'granted');
-            localStorage.setItem(`jaa_push_token_${currentDriverId}`, message.token);
-          }
+        if (message && message.type === 'EXPO_PUSH_TOKEN' && message.token) {
+          // @ts-ignore
+          if (window.receiveToken) window.receiveToken(message.token);
         }
       } catch (e) {
-        // Mensagem não é um JSON, ignorar
+        // Ignorar
       }
     };
 
     window.addEventListener('message', handleMessage);
     document.addEventListener('message', handleMessage);
     
-    // Para Android WebView, às vezes a mensagem vem via window.onMessage
+    // Para Android WebView
     // @ts-ignore
     window.onMessage = handleMessage;
-    
-    // Função global para o App chamar diretamente se necessário
-    // @ts-ignore
-    window.receiveToken = (token: string) => {
-      console.log("App: receiveToken chamado diretamente pelo App", token);
-      handleMessage({ data: JSON.stringify({ type: 'TOKEN_RECEBIDO', token }) });
-    };
 
     return () => {
       window.removeEventListener('message', handleMessage);
       document.removeEventListener('message', handleMessage);
       // @ts-ignore
       delete window.onMessage;
-      // @ts-ignore
-      delete window.receiveToken;
+      // NÃO deletamos window.receiveToken para garantir que o Android sempre possa chamá-la
     };
-  }, [role, currentDriverId, handleUpdateDriver]);
+  }, []); // Array de dependências vazio para rodar apenas uma vez
 
   // NOVO FLUXO DE RETORNO BLINDADO
   const handleConfirmReturnRobust = async (orderId: string) => {

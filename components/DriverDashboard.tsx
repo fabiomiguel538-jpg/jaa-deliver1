@@ -93,6 +93,22 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       }
     }
   }, [profile.expoPushToken, profile.fcmToken, profile?.id]);
+
+  // Escuta o evento customizado disparado pela função global window.receiveToken
+  useEffect(() => {
+    const handleTokenReceived = (e: any) => {
+      const token = e.detail?.token;
+      if (token) {
+        setNotificationStatus('granted');
+        setFcmToken(token);
+        setIsActivating(false);
+      }
+    };
+
+    window.addEventListener('tokenReceived', handleTokenReceived);
+    return () => window.removeEventListener('tokenReceived', handleTokenReceived);
+  }, []);
+
   // Tenta ativação automática de notificações ao entrar no dashboard
   useEffect(() => {
     if (window.ReactNativeWebView && !profile.expoPushToken && !profile.fcmToken) {
@@ -1050,7 +1066,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                               <div>
                                 <h4 className="text-sm font-bold text-gray-900">Status de Notificações</h4>
                                 <p className="text-[10px] text-gray-500">
-                                  {(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? 'Ativo o tempo todo' : 
+                                  {(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? '✅ Notificações Ativas' : 
                                    notificationStatus === 'denied' ? 'Bloqueado no navegador' : 
                                    isActivating ? 'Ativando automaticamente...' : 'Aguardando ativação'}
                                 </p>
@@ -1073,48 +1089,48 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
                                     setIsActivating(true);
                                     
-                                    // Timeout mais longo para dar tempo ao usuário de aceitar no sistema
-                                    // Se em 30 segundos não chegar o token, voltamos ao estado inicial
                                     setTimeout(() => {
-                                      console.log('DriverDashboard: Verificando timeout de ativação...');
-                                      // Só reseta se ainda não tivermos o token
                                       const hasToken = localStorage.getItem(`jaa_notifications_${profile?.id}`) === 'granted';
                                       if (!hasToken && !profile.expoPushToken) {
-                                        console.warn('DriverDashboard: Timeout atingido sem receber token.');
                                         setIsActivating(false);
-                                      } else {
-                                        console.log('DriverDashboard: Token detectado, ignorando timeout.');
                                       }
                                     }, 30000);
                                   } else {
-                                    alert('Este recurso só funciona dentro do aplicativo oficial do motoboy.');
+                                    // SUPORTE PARA NAVEGADORES (PC/MOBILE BROWSER)
+                                    requestNotificationPermission();
                                   }
                                 }}
                                 disabled={isActivating}
                                 type="button"
-                                className={`px-3 py-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-lg shadow-sm active:scale-95 transition-all ${isActivating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`px-4 py-2 bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg active:scale-95 transition-all ${isActivating ? 'opacity-50 cursor-not-allowed' : ''}`}
                               >
-                                {isActivating ? 'AGUARDANDO APP...' : 'ATIVAR'}
+                                {isActivating ? 'AGUARDANDO...' : 'ATIVAR NOTIFICAÇÕES'}
                               </button>
                             )}
-                            {profile.email === 'fabiomiguel538@gmail.com' && (
-                              <button 
-                                onClick={() => {
-                                  // @ts-ignore
-                                  if (window.receiveToken) window.receiveToken('SIMULATED_TOKEN_' + Date.now());
-                                }}
-                                className="mt-2 text-[8px] text-gray-300 block"
-                              >
-                                Simular Token (Dev Only)
-                              </button>
-                            )}
-                            {profile.email === 'fabiomiguel538@gmail.com' && (
-                              <div className="mt-2 flex gap-1">
+                          </div>
+
+                          {/* Seção de ajuda discreta para desenvolvedor ou problemas técnicos */}
+                          {profile.email === 'fabiomiguel538@gmail.com' && (
+                            <div className="mt-4 pt-4 border-t border-gray-50 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest">Painel de Diagnóstico</p>
+                                <button 
+                                  onClick={() => {
+                                    // @ts-ignore
+                                    if (window.receiveToken) window.receiveToken('SIMULATED_TOKEN_' + Date.now());
+                                  }}
+                                  className="text-[8px] text-orange-500 font-bold underline"
+                                >
+                                  Simular Token
+                                </button>
+                              </div>
+                              
+                              <div className="flex gap-1">
                                 <input 
                                   id="manual-token"
                                   type="text" 
-                                  placeholder="Token Manual" 
-                                  className="text-[8px] px-1 py-0.5 border rounded flex-1"
+                                  placeholder="Colar Token Manual" 
+                                  className="text-[8px] px-2 py-1 border border-gray-100 rounded-lg flex-1 outline-none focus:border-orange-200"
                                 />
                                 <button 
                                   onClick={() => {
@@ -1122,24 +1138,19 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                                     // @ts-ignore
                                     if (window.receiveToken && val) window.receiveToken(val);
                                   }}
-                                  className="text-[8px] bg-gray-200 px-1 rounded"
+                                  className="text-[8px] bg-gray-100 px-3 rounded-lg font-bold text-gray-500"
                                 >
                                   OK
                                 </button>
                               </div>
-                            )}
-                          </div>
 
-                          {!(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
-                            <div className="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                              <h5 className="text-[10px] font-bold text-blue-800 uppercase mb-1">Problemas com o sinal?</h5>
-                              <p className="text-[9px] text-blue-600 leading-relaxed">
-                                Se o sinal não chegar automaticamente, certifique-se de que o seu App Android está configurado para enviar o token. 
-                                O App deve executar este comando no WebView:
-                                <code className="block mt-1 p-1 bg-white rounded border border-blue-200 text-[8px] font-mono">
-                                  window.receiveToken("TOKEN_DO_DISPOSITIVO");
-                                </code>
-                              </p>
+                              {!(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
+                                <div className="p-2 bg-blue-50/50 rounded-lg border border-blue-100/50">
+                                  <p className="text-[7px] text-blue-600 leading-tight">
+                                    Para Android: <code className="bg-white px-1 rounded">window.receiveToken("TOKEN")</code>
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           )}
 
