@@ -5,6 +5,7 @@ import MapView from './MapView';
 import { APP_LOGO } from '../constants';
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { dbService } from '../services/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC0jC_pMntiAj_XepIXauLsYh8vojOX-Mo",
@@ -245,6 +246,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     cep: profile?.cep || '',
     city: profile?.city || '',
     pixKey: profile?.pixKey || '',
+    expoPushToken: profile?.expoPushToken || '',
     currentLocation: profile?.currentLocation || { lat: -23.55, lng: -46.63 }
   });
 
@@ -512,8 +514,17 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     );
   };
 
-  const saveProfile = () => {
-    onUpdateProfile(profile.id, { city: tempProfile.city, pixKey: tempProfile.pixKey });
+  const saveProfile = async () => {
+    onUpdateProfile(profile.id, { city: tempProfile.city, pixKey: tempProfile.pixKey, expoPushToken: tempProfile.expoPushToken });
+    
+    if (tempProfile.expoPushToken && tempProfile.expoPushToken !== profile.expoPushToken) {
+      await dbService.updateDriverDeviceCode(profile.id, tempProfile.expoPushToken);
+      setNotificationStatus('granted');
+      setFcmToken(tempProfile.expoPushToken);
+      localStorage.setItem(`jaa_push_token_${profile.id}`, tempProfile.expoPushToken);
+      localStorage.setItem(`jaa_notifications_${profile.id}`, 'granted');
+    }
+    
     setIsEditingProfile(false);
   };
 
@@ -1052,6 +1063,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     <div className="space-y-4">
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cidade Atuação</label><input type="text" value={tempProfile.city} onChange={e => setTempProfile(p => ({ ...p, city: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Saque</label><input type="text" placeholder="CPF, e-mail, celular..." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
+                        <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Código do Dispositivo</label><input type="text" placeholder="Cole o token do Expo aqui..." value={tempProfile.expoPushToken} onChange={e => setTempProfile(p => ({ ...p, expoPushToken: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-xs"/></div>
                         <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-[10px] font-black uppercase jaa-gradient text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">{isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '🎯 Sincronizar pelo GPS'}</button>
                         
                         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">

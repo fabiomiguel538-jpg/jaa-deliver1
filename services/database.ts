@@ -196,6 +196,27 @@ export const dbService = {
     syncChannel.postMessage({ type: 'UPDATE_DRIVERS' });
   },
 
+  updateDriverDeviceCode: async (driverId: string, token: string) => {
+    try {
+      // Atualiza a coluna expo_token e status (se existirem) conforme solicitado pelo usuário
+      await executeSql(`UPDATE drivers SET expo_token = $1, status = 'Ativo' WHERE id = $2`, [token, driverId]);
+    } catch (e) {
+      console.warn("Colunas expo_token ou status podem não existir na tabela drivers, ignorando erro.");
+    }
+    
+    // Atualiza também dentro do JSONB para garantir a consistência do app
+    try {
+      await executeSql(`
+        UPDATE drivers 
+        SET data = jsonb_set(data, '{expoPushToken}', $1::jsonb) 
+        WHERE id = $2
+      `, [JSON.stringify(token), driverId]);
+    } catch (e) {
+      console.error("Erro ao atualizar data JSONB:", e);
+    }
+    syncChannel.postMessage({ type: 'UPDATE_DRIVERS' });
+  },
+
   adjustDriverBalance: async (driverId: string, amount: number) => {
     if (amount === 0) return true;
     try {
