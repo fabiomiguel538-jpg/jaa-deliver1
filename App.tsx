@@ -625,7 +625,12 @@ const App: React.FC = () => {
     
     // Dispara notificação push para os motoboys disponíveis
     const bairro = order.dropoff.address ? order.dropoff.address.split(',')[0] : order.storeCity;
-    sendNewOrderPushNotification(order.price, bairro, order.distance).catch(console.error);
+    sendNewOrderPushNotification({
+      valor: order.price.toFixed(2),
+      bairro: bairro,
+      distancia: order.distance.toFixed(1),
+      regiao: order.storeCity
+    }).catch(console.error);
   };
 
   const handleDeleteDriver = async (driverId: string) => {

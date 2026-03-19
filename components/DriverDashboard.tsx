@@ -1072,15 +1072,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     <div className="space-y-4">
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cidade Atuação</label><input type="text" value={tempProfile.city} onChange={e => setTempProfile(p => ({ ...p, city: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Saque</label><input type="text" placeholder="CPF, e-mail, celular..." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Código do Dispositivo</label>
-                            <textarea 
-                                placeholder="Cole o token do Expo aqui..." 
-                                value={tempProfile.expoPushToken} 
-                                onChange={e => setTempProfile(p => ({ ...p, expoPushToken: e.target.value }))} 
-                                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-[10px] min-h-[80px] resize-none"
-                            />
-                        </div>
                         <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-[10px] font-black uppercase jaa-gradient text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">{isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '🎯 Sincronizar pelo GPS'}</button>
                         
                         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
@@ -1137,51 +1128,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                               </button>
                             )}
                           </div>
-
-                          {/* Seção de ajuda discreta para desenvolvedor ou problemas técnicos */}
-                          {profile.email === 'fabiomiguel538@gmail.com' && (
-                            <div className="mt-4 pt-4 border-t border-gray-50 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest">Painel de Diagnóstico</p>
-                                <button 
-                                  onClick={() => {
-                                    // @ts-ignore
-                                    if (window.receiveToken) window.receiveToken('SIMULATED_TOKEN_' + Date.now());
-                                  }}
-                                  className="text-[8px] text-orange-500 font-bold underline"
-                                >
-                                  Simular Token
-                                </button>
-                              </div>
-                              
-                              <div className="flex gap-1">
-                                <input 
-                                  id="manual-token"
-                                  type="text" 
-                                  placeholder="Colar Token Manual" 
-                                  className="text-[8px] px-2 py-1 border border-gray-100 rounded-lg flex-1 outline-none focus:border-orange-200"
-                                />
-                                <button 
-                                  onClick={() => {
-                                    const val = (document.getElementById('manual-token') as HTMLInputElement).value;
-                                    // @ts-ignore
-                                    if (window.receiveToken && val) window.receiveToken(val);
-                                  }}
-                                  className="text-[8px] bg-gray-100 px-3 rounded-lg font-bold text-gray-500"
-                                >
-                                  OK
-                                </button>
-                              </div>
-
-                              {!(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
-                                <div className="p-2 bg-blue-50/50 rounded-lg border border-blue-100/50">
-                                  <p className="text-[7px] text-blue-600 leading-tight">
-                                    Para Android: <code className="bg-white px-1 rounded">window.receiveToken("TOKEN")</code>
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          )}
 
                           {notificationStatus === 'granted' && (
                             <div className="pt-2 border-t border-gray-50">
