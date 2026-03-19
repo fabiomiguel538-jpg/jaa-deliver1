@@ -249,12 +249,12 @@ const App: React.FC = () => {
   }, [loadAllData]);
   
   useEffect(() => {
-    // Configuração do intervalo de atualização automática para 10 segundos (afrouxado para evitar ghosting)
-    const POLLING_INTERVAL = 10000; 
+    // Configuração do intervalo de atualização automática para 2 segundos (rápido para motoboys)
+    const POLLING_INTERVAL = 2000; 
     
     const pollData = setInterval(() => {
       // Só busca se a aba estiver visível, houver usuário logado e não houver processamento ativo
-      if (document.visibilityState === 'visible' && role && !isSyncing && !isProcessing && (Date.now() - lastInternalUpdate.current > 10000)) {
+      if (document.visibilityState === 'visible' && role && !isSyncing && !isProcessing && (Date.now() - lastInternalUpdate.current > 2000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);

@@ -332,13 +332,13 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
   };
 
-  // Polling Seguro (5 Segundos)
+  // Polling Seguro (2 Segundos)
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         onRefresh();
       }
-    }, 5000);
+    }, 2000);
     // CRUCIAL: Retorno clearInterval no cleanup para não estourar a memória
     return () => clearInterval(interval);
   }, [onRefresh]);
@@ -454,10 +454,59 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
   }, [allOrders, activeOrders, onRefresh]);
 
-  // Sincronização do contador de pedidos disponíveis
+  // Sincronização do contador de pedidos disponíveis e disparo de notificação elegante
+  const seenOrdersRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
+    if (cityOrders.length > 0) {
+      // Encontra pedidos novos que ainda não vimos
+      const newOrders = cityOrders.filter(o => !seenOrdersRef.current.has(o.id));
+      
+      if (newOrders.length > 0) {
+        // Pega o pedido mais recente
+        const newestOrder = newOrders.sort((a, b) => b.timestamp - a.timestamp)[0];
+        
+        // Verifica se o pedido é realmente novo (criado nos últimos 60 segundos)
+        // Isso evita que o modal pipoque para pedidos antigos ao abrir o app
+        const isTrulyNew = (Date.now() - newestOrder.timestamp) < 60000;
+        
+        // Se o motoboy estiver online, não estiver no meio de um aceite, e o pedido for novo
+        if (isOnline && !isModalOpen && !isAccepting && isTrulyNew) {
+          setDadosNovaCorrida({
+            id: newestOrder.id,
+            endereco: newestOrder.dropoff.address || 'Endereço não informado',
+            valor: newestOrder.price.toFixed(2),
+            distancia: newestOrder.distance.toFixed(1),
+            valorPorKm: (newestOrder.price / Math.max(newestOrder.distance, 1)).toFixed(2),
+            paradas: '1 parada',
+            nomeLoja: newestOrder.storeCity || 'Estabelecimento',
+            enderecoColeta: newestOrder.pickup.address || 'Endereço de coleta...',
+            tipoEntrega: 'Nuvem',
+            metodoPagamento: newestOrder.paymentReceiptUrl === 'WALLET_BALANCE' ? 'Carteira' : 'Cartão/Pix'
+          });
+
+          setIsModalOpen(true);
+          setTimeLeft(20);
+
+          try {
+            alertSound.currentTime = 0;
+            alertSound.play().catch(e => console.warn("Autoplay bloqueado:", e));
+          } catch (error) {
+            console.error("Erro ao tocar áudio:", error);
+          }
+
+          if ("vibrate" in navigator) {
+            navigator.vibrate([1000, 500, 1000]);
+          }
+        }
+        
+        // Marca todos os novos como vistos
+        newOrders.forEach(o => seenOrdersRef.current.add(o.id));
+      }
+    }
+    
     lastAvailableCount.current = cityOrders.length;
-  }, [cityOrders]);
+  }, [cityOrders, isOnline, isModalOpen, isAccepting]);
 
   const lastLocationUpdate = useRef<{ lat: number; lng: number; time: number }>({ lat: 0, lng: 0, time: 0 });
 
