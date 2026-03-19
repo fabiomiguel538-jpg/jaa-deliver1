@@ -396,38 +396,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
       onRequestPushToken();
     }
   }, []);
-
-  const sendTestNotification = async () => {
-    if (!profile.expoPushToken) {
-      alert("Token do Expo não encontrado. Certifique-se de estar no aplicativo e que o token foi capturado.");
-      return;
-    }
-
-    try {
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Accept-encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: profile.expoPushToken,
-          title: "NOVO PEDIDO DISPONÍVEL! 🚀",
-          body: "Clique aqui para ver os detalhes da entrega.",
-          priority: "high",
-          sound: "default",
-          channelId: "default",
-        }),
-      });
-      const resData = await response.json();
-      console.log('Resposta do Expo:', resData);
-      alert("Solicitação de notificação enviada ao Expo!");
-    } catch (error) {
-      console.error('Erro ao enviar notificação de teste:', error);
-      alert("Erro ao enviar notificação.");
-    }
-  };
   
   // Ouvinte (Listener) para cancelamento de corridas ativas
   useEffect(() => {
@@ -799,14 +767,6 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
             </div>
             <div className="grid grid-cols-1 gap-2">
               <button onClick={() => setIsEditingProfile(true)} className="w-full bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">SOLICITAR SAQUE / CONFIGS</button>
-              {profile.expoPushToken && (
-                <button 
-                  onClick={sendTestNotification} 
-                  className="w-full bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  <span>🔔</span> TESTAR NOTIFICAÇÃO DE PEDIDO
-                </button>
-              )}
             </div>
           </div>
 
