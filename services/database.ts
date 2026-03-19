@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
 
 const CLOUD_ORDER_LIMIT = 100;
 
-async function executeSql(query: string, params: any[] = [], retries = 3): Promise<any[]> {
+export async function executeSql(query: string, params: any[] = [], retries = 3): Promise<any[]> {
   if (!sqlClient) return [];
   
   for (let i = 0; i < retries; i++) {
@@ -198,10 +198,17 @@ export const dbService = {
 
   updateDriverDeviceCode: async (driverId: string, token: string) => {
     try {
-      // Atualiza a coluna expo_token e status (se existirem) conforme solicitado pelo usuário
+      // Atualiza a coluna expo_token e status (se existirem) na tabela drivers
       await executeSql(`UPDATE drivers SET expo_token = $1, status = 'Ativo' WHERE id = $2`, [token, driverId]);
     } catch (e) {
       console.warn("Colunas expo_token ou status podem não existir na tabela drivers, ignorando erro.");
+    }
+
+    try {
+      // Tenta atualizar na tabela motoboys caso ela exista separadamente no Neon
+      await executeSql(`UPDATE motoboys SET expo_token = $1, status = 'Ativo' WHERE id = $2`, [token, driverId]);
+    } catch (e) {
+      console.warn("Tabela motoboys pode não existir, ignorando erro.");
     }
     
     // Atualiza também dentro do JSONB para garantir a consistência do app

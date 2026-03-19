@@ -6,6 +6,7 @@ import AdminDashboard from './components/AdminDashboard';
 import DriverRegistration from './components/DriverRegistration';
 import StoreRegistration from './components/StoreRegistration';
 import { dbService } from './services/database';
+import { sendNewOrderPushNotification } from './services/notifications';
 import { APP_LOGO, LOGO_SVG_FALLBACK } from './constants';
 
 declare global {
@@ -621,6 +622,10 @@ const App: React.FC = () => {
       }
     }
     updateStateAndSave(setGlobalOrders, dbService.saveOrders, prev => [order, ...prev]);
+    
+    // Dispara notificação push para os motoboys disponíveis
+    const bairro = order.dropoff.address ? order.dropoff.address.split(',')[0] : order.storeCity;
+    sendNewOrderPushNotification(order.price, bairro, order.distance).catch(console.error);
   };
 
   const handleDeleteDriver = async (driverId: string) => {
@@ -747,6 +752,11 @@ const App: React.FC = () => {
         if (currentRole === UserRole.DRIVER && driverId) {
           console.log("App: Atualizando driver com token", driverId);
           updateDriver(driverId, { expoPushToken: token, fcmToken: token });
+          
+          // Chama o backend (Neon) para atualizar a coluna expo_token e status
+          dbService.updateDriverDeviceCode(driverId, token).catch(e => {
+            console.error("Erro ao atualizar token no backend:", e);
+          });
           
           // Persistência local imediata
           localStorage.setItem(`jaa_notifications_${driverId}`, 'granted');
