@@ -80,6 +80,7 @@ exports.handler = async (event) => {
             'Accept': 'application/json',
             'Accept-encoding': 'gzip, deflate',
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
           }
         }, (res) => {
           let data = '';

@@ -53,12 +53,17 @@ exports.handler = async (event) => {
       priority: 'high',
       title: "🚀 NOVA CORRIDA DISPONÍVEL!",
       body: `Valor: R$ ${valor} | Bairro: ${bairro}. Toque para aceitar!`,
-      android: { channelId: "pedidos" }
+      channelId: "pedidos"
     }));
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
+      },
       body: JSON.stringify(messages),
     });
 

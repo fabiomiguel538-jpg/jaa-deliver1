@@ -24,11 +24,10 @@ export const sendNewOrderPushNotification = async (data: OrderNotificationData) 
       SELECT data->>'expoPushToken' as expo_token, data->>'fcmToken' as fcm_token
       FROM drivers 
       WHERE data->>'isOnline' = 'true'
-        AND (LOWER(COALESCE(data->>'city', '')) = LOWER($1) OR COALESCE(data->>'city', '') = '' OR $1 = '')
     `;
     
     try {
-      const result = await executeSql(queryDrivers, [regiao || '']);
+      const result = await executeSql(queryDrivers, []);
       result.forEach((row: any) => {
         if (row.expo_token && row.expo_token.trim() !== '') tokens.push(row.expo_token);
         if (row.fcm_token && row.fcm_token.trim() !== '') tokens.push(row.fcm_token);
@@ -46,24 +45,67 @@ export const sendNewOrderPushNotification = async (data: OrderNotificationData) 
     const uniqueTokens = [...new Set(tokens)];
     console.log(`Enviando notificações para ${uniqueTokens.length} tokens únicos na região ${regiao}`);
 
-    // Dispara a notificação para cada token via Netlify Function
+    // Dispara a notificação para cada token
     const promises = uniqueTokens.map(async (token) => {
       try {
-        const response = await fetch('/.netlify/functions/dispararNotificacao', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            tokenFCM: token,
-            dadosDoPedido: order
-          }),
-        });
-        
-        if (!response.ok) {
-          console.error(`Erro ao enviar para token ${token.substring(0, 10)}...: ${response.statusText}`);
+        if (token.startsWith('ExponentPushToken') || token.startsWith('ExpoPushToken')) {
+          // Envia diretamente para a API do Expo (não precisa de servidor)
+          const driverEarning = order.driverEarning || 0;
+          const distance = order.distance || 1;
+          const pickupAddress = order.pickup?.address?.split(',')[0] || 'Local não informado';
+
+          const expoMessage = {
+            to: token,
+            sound: 'default',
+            priority: 'high',
+            title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
+            body: `Recolha: ${pickupAddress}. 1 parada.`,
+            channelId: "pedidos",
+            data: {
+              id: order.id,
+              orderId: order.id,
+              valor: driverEarning.toFixed(2),
+              storeId: order.storeId,
+              distancia_km: `${distance.toFixed(1)} km`,
+              valorPorKm: (driverEarning / distance).toFixed(2),
+              titulo: 'Nova Corrida Disponível! 🛵',
+              detalhes: `Pedido #${order.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
+            }
+          };
+
+          const response = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Accept-encoding': 'gzip, deflate',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(expoMessage),
+          });
+
+          if (!response.ok) {
+            console.error(`Erro ao enviar para Expo token ${token.substring(0, 10)}...: ${response.statusText}`);
+          } else {
+            console.log(`Notificação enviada com sucesso para Expo token ${token.substring(0, 10)}...`);
+          }
         } else {
-          console.log(`Notificação enviada com sucesso para token ${token.substring(0, 10)}...`);
+          // Para FCM puro, ainda tenta usar a Netlify Function
+          const response = await fetch('/.netlify/functions/dispararNotificacao', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              tokenFCM: token,
+              dadosDoPedido: order
+            }),
+          });
+          
+          if (!response.ok) {
+            console.error(`Erro ao enviar para FCM token ${token.substring(0, 10)}...: ${response.statusText}`);
+          } else {
+            console.log(`Notificação enviada com sucesso para FCM token ${token.substring(0, 10)}...`);
+          }
         }
       } catch (err) {
         console.error(`Falha na requisição para token ${token.substring(0, 10)}...:`, err);
