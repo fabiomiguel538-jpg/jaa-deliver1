@@ -18,9 +18,11 @@ exports.handler = async (event) => {
 
   try {
     const sql = neon(process.env.DATABASE_URL);
-    const payload = JSON.parse(event.body);
+    const payload = event.body ? JSON.parse(event.body) : {};
     const pedido = payload.record || payload;
     const pedidoId = pedido.id;
+
+    console.log('Iniciando envio para o pedido:', pedidoId);
 
     if (!pedidoId) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'ID do pedido não fornecido' }) };
@@ -69,6 +71,7 @@ exports.handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, notified: messages.length }) };
   } catch (error) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    console.error('Erro na função enviar-notificacao:', error);
+    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
