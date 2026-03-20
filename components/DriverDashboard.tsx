@@ -253,9 +253,11 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const cityOrders = useMemo(() => {
     const driverCity = (profile?.city || "").toLowerCase().trim();
-    return availableOrders.filter(o => 
-      (o.storeCity || "").toLowerCase().trim() === driverCity
-    );
+    if (!driverCity) return availableOrders;
+    return availableOrders.filter(o => {
+      const sCity = (o.storeCity || "").toLowerCase().trim();
+      return !sCity || sCity === driverCity;
+    });
   }, [availableOrders, profile?.city]);
 
   const driverHistory = useMemo(() => {
@@ -336,9 +338,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   // Polling Seguro (2 Segundos)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        onRefresh();
-      }
+      onRefresh();
     }, 2000);
     // CRUCIAL: Retorno clearInterval no cleanup para não estourar a memória
     return () => clearInterval(interval);
@@ -427,7 +427,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const seenOrdersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (cityOrders.length > 0) {
+    if (isOnline && cityOrders.length > 0) {
       // Encontra pedidos novos que ainda não vimos
       const newOrders = cityOrders.filter(o => !seenOrdersRef.current.has(o.id));
       
@@ -435,12 +435,8 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
         // Pega o pedido mais recente
         const newestOrder = newOrders.sort((a, b) => b.timestamp - a.timestamp)[0];
         
-        // Verifica se o pedido é realmente novo (criado nos últimos 60 segundos)
-        // Isso evita que o modal pipoque para pedidos antigos ao abrir o app
-        const isTrulyNew = (Date.now() - newestOrder.timestamp) < 60000;
-        
-        // Se o motoboy estiver online, não estiver no meio de um aceite, e o pedido for novo
-        if (isOnline && !isModalOpen && !isAccepting && isTrulyNew) {
+        if (!isModalOpen && !isAccepting) {
+          // Se for novo e a tela estiver livre, mostra o modal
           setDadosNovaCorrida({
             id: newestOrder.id,
             endereco: newestOrder.dropoff.address || 'Endereço não informado',
@@ -467,10 +463,10 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
           if ("vibrate" in navigator) {
             navigator.vibrate([1000, 500, 1000]);
           }
+          
+          // Marca o pedido atual como visto
+          seenOrdersRef.current.add(newestOrder.id);
         }
-        
-        // Marca todos os novos como vistos
-        newOrders.forEach(o => seenOrdersRef.current.add(o.id));
       }
     }
     

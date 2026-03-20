@@ -253,8 +253,8 @@ const App: React.FC = () => {
     const POLLING_INTERVAL = 2000; 
     
     const pollData = setInterval(() => {
-      // Só busca se a aba estiver visível, houver usuário logado e não houver processamento ativo
-      if (document.visibilityState === 'visible' && role && !isSyncing && !isProcessing && (Date.now() - lastInternalUpdate.current > 2000)) {
+      // Só busca se houver usuário logado e não houver processamento ativo
+      if (role && !isSyncing && !isProcessing && (Date.now() - lastInternalUpdate.current > 2000)) {
         loadAllData();
       }
     }, POLLING_INTERVAL);
@@ -629,7 +629,8 @@ const App: React.FC = () => {
       valor: order.price.toFixed(2),
       bairro: bairro,
       distancia: order.distance.toFixed(1),
-      regiao: order.storeCity
+      regiao: order.storeCity,
+      order: order
     }).catch(console.error);
   };
 

@@ -1,63 +1,40 @@
 import { executeSql } from './database';
+import { Order } from '../types';
 
 interface OrderNotificationData {
   valor: number | string;
   bairro: string;
   distancia: number | string;
   regiao: string;
+  order: Order;
 }
 
 /**
  * Função para disparar notificações push de alta prioridade para motoboys na região de um pedido.
  * Deve ser chamada sempre que um novo pedido entrar no sistema.
- * 
- * Exibição em Primeiro Plano: A notificação deve usar o NotificationHandler no app
- * para ser exibida mesmo se o motoboy estiver navegando na WebView.
- * Exemplo de configuração no App (React Native/Expo):
- * Notifications.setNotificationHandler({
- *   handleNotification: async () => ({
- *     shouldShowAlert: true,
- *     shouldPlaySound: true,
- *     shouldSetBadge: false,
- *   }),
- * });
  */
 export const sendNewOrderPushNotification = async (data: OrderNotificationData) => {
-  const { valor, bairro, distancia, regiao } = data;
+  const { regiao, order } = data;
 
   try {
-    // Busca no Neon: todos os expo_token da tabela motoboys onde o status = 'ativo' e a regiao seja igual à do estabelecimento.
-    const queryMotoboys = `
-      SELECT expo_token 
-      FROM motoboys 
-      WHERE status = 'ativo' 
-        AND regiao = $1 
-        AND expo_token IS NOT NULL 
-        AND expo_token != ''
-    `;
-
     let tokens: string[] = [];
     
+    // Busca na tabela drivers todos os tokens (expoPushToken e fcmToken)
+    const queryDrivers = `
+      SELECT data->>'expoPushToken' as expo_token, data->>'fcmToken' as fcm_token
+      FROM drivers 
+      WHERE data->>'isOnline' = 'true'
+        AND (LOWER(COALESCE(data->>'city', '')) = LOWER($1) OR COALESCE(data->>'city', '') = '' OR $1 = '')
+    `;
+    
     try {
-      const resultMotoboys = await executeSql(queryMotoboys, [regiao]);
-      tokens = resultMotoboys.map((row: any) => row.expo_token).filter(Boolean);
-    } catch (err) {
-      console.warn("Tabela motoboys não encontrada ou erro na query, tentando tabela drivers...", err);
-      // Fallback para a tabela drivers caso a tabela motoboys não exista no banco atual
-      const queryDrivers = `
-        SELECT data->>'expoPushToken' as token 
-        FROM drivers 
-        WHERE (data->>'isOnline' = 'true' OR data->>'status' = 'ativo')
-          AND data->>'city' = $1
-          AND data->>'expoPushToken' IS NOT NULL 
-          AND data->>'expoPushToken' != ''
-      `;
-      try {
-        const result = await executeSql(queryDrivers, [regiao]);
-        tokens = result.map((row: any) => row.token).filter(Boolean);
-      } catch (e) {
-        console.error("Erro ao buscar tokens na tabela drivers:", e);
-      }
+      const result = await executeSql(queryDrivers, [regiao || '']);
+      result.forEach((row: any) => {
+        if (row.expo_token && row.expo_token.trim() !== '') tokens.push(row.expo_token);
+        if (row.fcm_token && row.fcm_token.trim() !== '') tokens.push(row.fcm_token);
+      });
+    } catch (e) {
+      console.error("Erro ao buscar tokens na tabela drivers:", e);
     }
 
     if (tokens.length === 0) {
@@ -67,37 +44,34 @@ export const sendNewOrderPushNotification = async (data: OrderNotificationData) 
 
     // Remove tokens duplicados
     const uniqueTokens = [...new Set(tokens)];
+    console.log(`Enviando notificações para ${uniqueTokens.length} tokens únicos na região ${regiao}`);
 
-    // Configuração da Notificação Elegante (Heads-up)
-    const message = {
-      to: uniqueTokens,
-      title: '🚀 NOVA CORRIDA DISPONÍVEL!',
-      body: `Valor: R$ ${valor} | Local: ${bairro} | Distância: ${distancia}km`,
-      sound: 'default',
-      priority: 'high',
-      // Estrutura de Dados Android (Crucial)
-      // Envie obrigatoriamente o campo channelId: "pedidos" dentro do objeto android.
-      // Isso garante que a notificação salte na tela mesmo com o app aberto ou fechado.
-      android: {
-        channelId: 'pedidos'
+    // Dispara a notificação para cada token via Netlify Function
+    const promises = uniqueTokens.map(async (token) => {
+      try {
+        const response = await fetch('/.netlify/functions/dispararNotificacao', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tokenFCM: token,
+            dadosDoPedido: order
+          }),
+        });
+        
+        if (!response.ok) {
+          console.error(`Erro ao enviar para token ${token.substring(0, 10)}...: ${response.statusText}`);
+        } else {
+          console.log(`Notificação enviada com sucesso para token ${token.substring(0, 10)}...`);
+        }
+      } catch (err) {
+        console.error(`Falha na requisição para token ${token.substring(0, 10)}...:`, err);
       }
-    };
-
-    // Saída do Código: Função assíncrona usando fetch para a API da Expo
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(message),
     });
 
-    const receipt = await response.json();
-    console.log("Notificações enviadas com sucesso:", receipt);
-    
-    return receipt;
+    await Promise.allSettled(promises);
+    return true;
   } catch (error) {
     console.error("Erro ao enviar notificação push de novo pedido:", error);
   }

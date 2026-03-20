@@ -44,28 +44,99 @@ exports.handler = async (event) => {
       };
     }
 
+    // Verifica se é um token do Expo
+    if (tokenFCM.startsWith('ExponentPushToken') || tokenFCM.startsWith('ExpoPushToken')) {
+      console.log(`Enviando notificação via Expo para o token: ${tokenFCM.substring(0, 20)}...`);
+      
+      const driverEarning = dadosDoPedido.driverEarning || 0;
+      const distance = dadosDoPedido.distance || 1;
+      const pickupAddress = dadosDoPedido.pickup?.address?.split(',')[0] || 'Local não informado';
+
+      const expoMessage = {
+        to: tokenFCM,
+        sound: 'default',
+        priority: 'high',
+        title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
+        body: `Recolha: ${pickupAddress}. 1 parada.`,
+        channelId: "pedidos",
+        data: {
+          id: dadosDoPedido.id,
+          orderId: dadosDoPedido.id,
+          valor: driverEarning.toFixed(2),
+          storeId: dadosDoPedido.storeId,
+          distancia_km: `${distance.toFixed(1)} km`,
+          valorPorKm: (driverEarning / distance).toFixed(2),
+          titulo: 'Nova Corrida Disponível! 🛵',
+          detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
+        }
+      };
+
+      const https = require('https');
+      
+      const expoResponse = await new Promise((resolve, reject) => {
+        const req = https.request('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Accept-encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          }
+        }, (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch (e) {
+              resolve(data);
+            }
+          });
+        });
+        
+        req.on('error', (e) => {
+          reject(e);
+        });
+        
+        req.write(JSON.stringify(expoMessage));
+        req.end();
+      });
+
+      console.log('Notificação enviada via Expo com sucesso:', expoResponse);
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, messageId: expoResponse })
+      };
+    }
+
+    // Caso contrário, tenta enviar via Firebase Cloud Messaging (FCM)
+    const driverEarning = dadosDoPedido.driverEarning || 0;
+    const distance = dadosDoPedido.distance || 1;
+    const pickupAddress = dadosDoPedido.pickup?.address?.split(',')[0] || 'Local não informado';
+
     const message = {
       notification: {
-        title: `Nova Corrida: R$ ${dadosDoPedido.driverEarning.toFixed(2)}`,
-        body: `Recolha: ${dadosDoPedido.pickup.address?.split(',')[0]}. 1 parada.`,
+        title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
+        body: `Recolha: ${pickupAddress}. 1 parada.`,
       },
       data: {
         id: dadosDoPedido.id,
         orderId: dadosDoPedido.id,
-        valor: dadosDoPedido.driverEarning.toFixed(2),
+        valor: driverEarning.toFixed(2),
         storeId: dadosDoPedido.storeId,
-        distancia_km: `${dadosDoPedido.distance.toFixed(1)} km`,
-        valorPorKm: (dadosDoPedido.driverEarning / (dadosDoPedido.distance || 1)).toFixed(2),
+        distancia_km: `${distance.toFixed(1)} km`,
+        valorPorKm: (driverEarning / distance).toFixed(2),
         titulo: 'Nova Corrida Disponível! 🛵',
-        detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${dadosDoPedido.driverEarning.toFixed(2)}\n📏 Distância: ${dadosDoPedido.distance.toFixed(1)} km\n📍 Origem: ${dadosDoPedido.pickup.address?.split(',')[0]}`,
+        detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
       },
       token: tokenFCM,
     };
 
     // Dispara a notificação
-    console.log(`Tentando enviar notificação para o token: ${tokenFCM.substring(0, 10)}...`);
+    console.log(`Tentando enviar notificação FCM para o token: ${tokenFCM.substring(0, 10)}...`);
     const response = await admin.messaging().send(message);
-    console.log('Notificação enviada com sucesso:', response);
+    console.log('Notificação FCM enviada com sucesso:', response);
 
     return {
       statusCode: 200,
