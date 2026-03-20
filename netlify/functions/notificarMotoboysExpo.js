@@ -1,10 +1,22 @@
 const { neon } = require('@neondatabase/serverless');
 
 exports.handler = async (event) => {
+  const headers = {
+    'Access-Control-Allow-Origin': event.headers.origin || '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent, X-Requested-With, Accept, Origin',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
   // Apenas permite requisições POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers,
       body: JSON.stringify({ error: 'Método não permitido' })
     };
   }
@@ -26,6 +38,7 @@ exports.handler = async (event) => {
     if (!pedidoId) {
       return {
         statusCode: 400,
+        headers,
         body: JSON.stringify({ error: 'ID do pedido não fornecido' })
       };
     }
@@ -40,6 +53,7 @@ exports.handler = async (event) => {
     if (pedidosResult.length === 0) {
       return {
         statusCode: 404,
+        headers,
         body: JSON.stringify({ error: 'Pedido não encontrado' })
       };
     }
@@ -59,6 +73,7 @@ exports.handler = async (event) => {
       console.log(`Nenhum motoboy disponível com expo_token na região ${id_regiao}`);
       return {
         statusCode: 200,
+        headers,
         body: JSON.stringify({ success: true, message: 'Nenhum motoboy disponível para notificar', notifiedCount: 0 })
       };
     }
@@ -69,6 +84,7 @@ exports.handler = async (event) => {
     if (expoTokens.length === 0) {
       return {
         statusCode: 200,
+        headers,
         body: JSON.stringify({ success: true, message: 'Nenhum token Expo válido encontrado', notifiedCount: 0 })
       };
     }
@@ -130,6 +146,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify({ 
         success: true, 
         message: 'Notificações enviadas com sucesso', 
@@ -141,6 +158,7 @@ exports.handler = async (event) => {
     console.error('Erro na automação de disparo:', error);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({ error: 'Erro interno no servidor', details: error.message })
     };
   }

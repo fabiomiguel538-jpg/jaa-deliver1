@@ -9,6 +9,15 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        cors: {
+          origin: true, // Reflete a origem da requisição
+          methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'User-Agent', 'X-Requested-With', 'Accept', 'Origin'],
+          credentials: true
+        },
+        headers: {
+          'Access-Control-Allow-Credentials': 'true'
+        }
       },
       plugins: [react(), tailwindcss()],
       define: {

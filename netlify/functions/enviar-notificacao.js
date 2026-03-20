@@ -1,8 +1,19 @@
 const { neon } = require('@neondatabase/serverless');
 
 exports.handler = async (event) => {
+  const headers = {
+    'Access-Control-Allow-Origin': event.headers.origin || '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent, X-Requested-With, Accept, Origin',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Método não permitido' }) };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método não permitido' }) };
   }
 
   try {
@@ -12,7 +23,7 @@ exports.handler = async (event) => {
     const pedidoId = pedido.id;
 
     if (!pedidoId) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'ID do pedido não fornecido' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'ID do pedido não fornecido' }) };
     }
 
     const pedidosResult = await sql`
@@ -20,7 +31,7 @@ exports.handler = async (event) => {
     `;
 
     if (pedidosResult.length === 0) {
-      return { statusCode: 404, body: JSON.stringify({ error: 'Pedido não encontrado' }) };
+      return { statusCode: 404, headers, body: JSON.stringify({ error: 'Pedido não encontrado' }) };
     }
 
     const { valor, bairro, id_regiao } = pedidosResult[0];
@@ -33,7 +44,7 @@ exports.handler = async (event) => {
     const expoTokens = motoboysResult.map(m => m.expo_token).filter(token => token && token.startsWith('ExponentPushToken'));
 
     if (expoTokens.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({ success: true, message: 'Nenhum motoboy com token' }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true, message: 'Nenhum motoboy com token' }) };
     }
 
     const messages = expoTokens.map(token => ({
@@ -51,8 +62,8 @@ exports.handler = async (event) => {
       body: JSON.stringify(messages),
     });
 
-    return { statusCode: 200, body: JSON.stringify({ success: true, notified: messages.length }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true, notified: messages.length }) };
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
   }
 };

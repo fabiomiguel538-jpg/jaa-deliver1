@@ -29,7 +29,7 @@ export async function executeSql(query: string, params: any[] = [], retries = 3)
   
   for (let i = 0; i < retries; i++) {
     try {
-      const result = await sqlClient(query, params);
+      const result = await sqlClient.query(query, params);
       return result as any[];
     } catch (error: any) {
       const errorMessage = error.message || "";
