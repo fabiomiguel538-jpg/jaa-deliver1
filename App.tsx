@@ -809,6 +809,22 @@ const App: React.FC = () => {
           // @ts-ignore
           if (window.receiveToken) window.receiveToken(message.token);
         }
+
+        if (message && message.type === 'SALVAR_TOKEN' && message.token) {
+          const currentRole = roleRef.current;
+          const driverId = currentDriverIdRef.current;
+          
+          if (currentRole === UserRole.DRIVER && driverId) {
+            dbService.updateDriverDeviceCode(driverId, message.token).then(() => {
+              console.log(`Token salvo com sucesso para o motoboy ${driverId}`);
+              alert(`Token salvo com sucesso para o motoboy ${driverId}`);
+            }).catch(e => {
+              console.error("Erro ao salvar token no banco Neon:", e);
+            });
+          } else {
+            console.warn("SALVAR_TOKEN recebido, mas nenhum motoboy está logado.");
+          }
+        }
       } catch (e) {
         // Ignorar
       }

@@ -164,6 +164,7 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
   }, [currentStatus]);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isGpsLoading, setIsGpsLoading] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [activeTab, setActiveTab] = useState<'orders' | 'scheduled' | 'history'>('orders');
@@ -728,6 +729,14 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                 <span className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-xl group-hover:bg-white group-hover:shadow-sm transition-all">⚙️</span>
                 <span>Configurações</span>
               </button>
+
+              <button 
+                onClick={() => { setIsNotificationsOpen(true); setIsMenuOpen(false); }}
+                className="flex items-center gap-4 w-full p-5 rounded-[2rem] hover:bg-gray-50 transition-all text-gray-700 font-black uppercase text-[11px] tracking-widest border border-transparent hover:border-gray-100 group"
+              >
+                <span className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-xl group-hover:bg-white group-hover:shadow-sm transition-all">🔔</span>
+                <span>Notificações</span>
+              </button>
               
               <button 
                 onClick={() => { onLogout(); setIsMenuOpen(false); }}
@@ -1074,122 +1083,155 @@ const DriverDashboard: React.FC<DriverDashboardProps> = ({
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Chave PIX Saque</label><input type="text" placeholder="CPF, e-mail, celular..." value={tempProfile.pixKey} onChange={e => setTempProfile(p => ({ ...p, pixKey: e.target.value }))} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold"/></div>
                         <button onClick={handleUseGps} disabled={isGpsLoading} className="w-full text-[10px] font-black uppercase jaa-gradient text-white py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">{isGpsLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '🎯 Sincronizar pelo GPS'}</button>
                         
-                        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
-                                (notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? 'bg-green-50 text-green-600' : 
-                                notificationStatus === 'denied' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
-                              }`}>
-                                {(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
-                              </div>
-                              <div>
-                                <h4 className="text-sm font-bold text-gray-900">Status de Notificações</h4>
-                                <p className="text-[10px] text-gray-500">
-                                  {(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? '✅ Notificações Ativas' : 
-                                   notificationStatus === 'denied' ? 'Bloqueado no navegador' : 
-                                   isActivating ? 'Ativando automaticamente...' : 'Aguardando ativação'}
-                                </p>
-                                <button 
-                                  onClick={() => onRefresh()} 
-                                  className="text-[9px] text-orange-500 font-bold uppercase mt-1 flex items-center gap-1"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-2.5 w-2.5 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                  </svg>
-                                  Sincronizar
-                                </button>
-                              </div>
-                            </div>
-                            {!(notificationStatus === 'granted' || !!profile.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
-                              <button 
-                                onClick={() => {
-                                  if (window.ReactNativeWebView) {
-                                    console.log('Solicitando permissão via WebView...');
-                                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
-                                    setIsActivating(true);
-                                    
-                                    setTimeout(() => {
-                                      const hasToken = localStorage.getItem(`jaa_notifications_${profile?.id}`) === 'granted';
-                                      if (!hasToken && !profile.expoPushToken) {
-                                        setIsActivating(false);
-                                      }
-                                    }, 30000);
-                                  } else {
-                                    // SUPORTE PARA NAVEGADORES (PC/MOBILE BROWSER)
-                                    requestNotificationPermission();
-                                  }
-                                }}
-                                disabled={isActivating}
-                                type="button"
-                                className={`px-4 py-2 bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg active:scale-95 transition-all ${isActivating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                {isActivating ? 'AGUARDANDO...' : 'ATIVAR NOTIFICAÇÕES'}
-                              </button>
-                            )}
-                          </div>
-
-                          {notificationStatus === 'granted' && (
-                            <div className="pt-2 border-t border-gray-50">
-                              <p className="text-[9px] text-gray-400 break-all font-mono">
-                                Token: {fcmToken || 'Não gerado'}
-                              </p>
-                              {!fcmToken && (
-                                <button 
-                                  onClick={requestNotificationPermission}
-                                  type="button"
-                                  className="mt-2 text-[10px] text-orange-600 font-bold underline"
-                                >
-                                  Gerar novo token
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            alertSound.currentTime = 0;
-                            alertSound.play().catch(e => alert('Erro ao tocar som: ' + e.message));
-                            if ('vibrate' in navigator) navigator.vibrate([1000, 500, 1000]);
-                            
-                            // Simular notificação na barra de status
-                            if ('serviceWorker' in navigator) {
-                              navigator.serviceWorker.ready.then((registration) => {
-                                registration.showNotification("🛵 Teste de Nova Corrida!", {
-                                  body: "Rua de Teste, 123 - R$ 15,50",
-                                  icon: "/favicon.ico",
-                                  badge: "/favicon.ico",
-                                  tag: "teste-corrida",
-                                  renotify: true,
-                                  requireInteraction: true,
-                                  vibrate: [1000, 500, 1000]
-                                } as any);
-                              });
-                            }
-
-                            setDadosNovaCorrida({
-                              id: 'TESTE-123',
-                              endereco: 'Rua de Teste, 123 - Centro',
-                              valor: '15.50',
-                              distancia: '3.5 km',
-                              valorPorKm: '4.42',
-                              paradas: '1 parada',
-                              nomeLoja: 'Loja de Teste',
-                              enderecoColeta: 'Av. Principal, 500',
-                              tipoEntrega: 'Teste',
-                              metodoPagamento: 'Dinheiro'
-                            });
-                            setIsModalOpen(true);
-                          }} 
-                          className="w-full text-[10px] font-black uppercase bg-blue-50 text-blue-600 py-4 rounded-xl flex items-center justify-center gap-2 border border-blue-100 shadow-sm"
-                        >
-                          🔔 Testar Notificação Elegante
-                        </button>
-
                         <button onClick={saveProfile} className="w-full bg-gray-800 text-white font-black py-5 rounded-2xl text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">SALVAR ALTERAÇÕES</button>
                     </div>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* ============================================================================ */}
+      {/* MODAL DE NOTIFICAÇÕES */}
+      {/* ============================================================================ */}
+      {isNotificationsOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black font-jaa italic">Notificações</h2>
+                    <button onClick={() => setIsNotificationsOpen(false)} className="font-bold text-gray-300">✕</button>
+                </div>
+                
+                <div className="space-y-4">
+                    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
+                            (notificationStatus === 'granted' || !!profile?.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? 'bg-green-50 text-green-600' : 
+                            notificationStatus === 'denied' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'
+                          }`}>
+                            {(notificationStatus === 'granted' || !!profile?.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? '✅' : notificationStatus === 'denied' ? '❌' : '🔔'}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-gray-900">Status de Notificações</h4>
+                            <p className="text-[10px] text-gray-500">
+                              {(notificationStatus === 'granted' || !!profile?.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) ? '✅ Notificações Ativas' : 
+                               notificationStatus === 'denied' ? 'Bloqueado no navegador' : 
+                               isActivating ? 'Ativando automaticamente...' : 'Aguardando ativação'}
+                            </p>
+                            <button 
+                              onClick={() => onRefresh()} 
+                              className="text-[9px] text-orange-500 font-bold uppercase mt-1 flex items-center gap-1"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className={`h-2.5 w-2.5 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Sincronizar
+                            </button>
+                          </div>
+                        </div>
+                        {!(notificationStatus === 'granted' || !!profile?.expoPushToken || !!localStorage.getItem(`jaa_push_token_${profile?.id}`)) && (
+                          <button 
+                            onClick={() => {
+                              if (window.ReactNativeWebView) {
+                                console.log('Solicitando permissão via WebView...');
+                                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PERMISSION' }));
+                                setIsActivating(true);
+                                
+                                setTimeout(() => {
+                                  const hasToken = localStorage.getItem(`jaa_notifications_${profile?.id}`) === 'granted';
+                                  if (!hasToken && !profile?.expoPushToken) {
+                                    setIsActivating(false);
+                                  }
+                                }, 30000);
+                              } else {
+                                // SUPORTE PARA NAVEGADORES (PC/MOBILE BROWSER)
+                                requestNotificationPermission();
+                              }
+                            }}
+                            disabled={isActivating}
+                            type="button"
+                            className={`px-4 py-2 bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg active:scale-95 transition-all ${isActivating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            {isActivating ? 'AGUARDANDO...' : 'ATIVAR NOTIFICAÇÕES'}
+                          </button>
+                        )}
+                      </div>
+
+                      {notificationStatus === 'granted' && (
+                        <div className="pt-2 border-t border-gray-50">
+                          <p className="text-[9px] text-gray-400 break-all font-mono">
+                            Token: {fcmToken || 'Não gerado'}
+                          </p>
+                          {!fcmToken && (
+                            <button 
+                              onClick={requestNotificationPermission}
+                              type="button"
+                              className="mt-2 text-[10px] text-orange-600 font-bold underline"
+                            >
+                              Gerar novo token
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Informativo sobre o banco de dados */}
+                    <div className={`p-4 rounded-2xl border flex gap-3 items-start ${profile?.expoPushToken ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100'}`}>
+                      <div className={`text-xl ${profile?.expoPushToken ? 'text-green-500' : 'text-blue-500'}`}>
+                        {profile?.expoPushToken ? '✅' : 'ℹ️'}
+                      </div>
+                      <div>
+                        <h4 className={`text-xs font-bold ${profile?.expoPushToken ? 'text-green-900' : 'text-blue-900'}`}>
+                          {profile?.expoPushToken ? 'Token Salvo com Sucesso' : 'Sincronização Automática'}
+                        </h4>
+                        <p className={`text-[10px] mt-1 leading-relaxed ${profile?.expoPushToken ? 'text-green-700' : 'text-blue-700'}`}>
+                          {profile?.expoPushToken 
+                            ? 'O código do seu dispositivo foi salvo no banco de dados. Você está pronto para receber notificações de novas corridas.' 
+                            : 'O código do seu dispositivo (token) é gerado e salvo automaticamente no banco de dados do sistema assim que as notificações são ativadas. Você não precisa fazer nada manualmente.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        alertSound.currentTime = 0;
+                        alertSound.play().catch(e => alert('Erro ao tocar som: ' + e.message));
+                        if ('vibrate' in navigator) navigator.vibrate([1000, 500, 1000]);
+                        
+                        // Simular notificação na barra de status
+                        if ('serviceWorker' in navigator) {
+                          navigator.serviceWorker.ready.then((registration) => {
+                            registration.showNotification("🛵 Teste de Nova Corrida!", {
+                              body: "Rua de Teste, 123 - R$ 15,50",
+                              icon: "/favicon.ico",
+                              badge: "/favicon.ico",
+                              tag: "teste-corrida",
+                              renotify: true,
+                              requireInteraction: true,
+                              vibrate: [1000, 500, 1000]
+                            } as any);
+                          });
+                        }
+
+                        setDadosNovaCorrida({
+                          id: 'TESTE-123',
+                          endereco: 'Rua de Teste, 123 - Centro',
+                          valor: '15.50',
+                          distancia: '3.5 km',
+                          valorPorKm: '4.42',
+                          paradas: '1 parada',
+                          nomeLoja: 'Loja de Teste',
+                          enderecoColeta: 'Av. Principal, 500',
+                          tipoEntrega: 'Teste',
+                          metodoPagamento: 'Dinheiro'
+                        });
+                        setIsModalOpen(true);
+                      }} 
+                      className="w-full text-[10px] font-black uppercase bg-blue-50 text-blue-600 py-4 rounded-xl flex items-center justify-center gap-2 border border-blue-100 shadow-sm"
+                    >
+                      🔔 Testar Notificação Elegante
+                    </button>
                 </div>
             </div>
         </div>
