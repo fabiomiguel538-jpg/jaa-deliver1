@@ -1,6 +1,8 @@
 const { neon } = require('@neondatabase/serverless');
 
 exports.handler = async (event) => {
+  console.log('Corpo recebido:', event.body);
+
   const headers = {
     'Access-Control-Allow-Origin': event.headers.origin || '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent, X-Requested-With, Accept, Origin',
@@ -10,6 +12,10 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
+  }
+
+  if (!event.body) {
+    return { statusCode: 200, headers, body: JSON.stringify({ status: "aguardando dados" }) };
   }
 
   if (event.httpMethod !== 'POST') {
