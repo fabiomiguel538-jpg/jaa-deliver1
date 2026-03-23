@@ -24,8 +24,8 @@ exports.handler = async (event) => {
 
     // Captura os parâmetros dependendo do método (GET ou POST)
     if (event.httpMethod === 'GET') {
-      nome = event.queryStringParameters.nome;
-      expo_token = event.queryStringParameters.token || event.queryStringParameters.expo_token;
+      nome = event.queryStringParameters?.nome;
+      expo_token = event.queryStringParameters?.token || event.queryStringParameters?.expo_token;
     } else {
       const payload = event.body ? JSON.parse(event.body) : {};
       nome = payload.nome;
@@ -70,7 +70,7 @@ exports.handler = async (event) => {
     return { 
       statusCode: 200, 
       headers, 
-      body: JSON.stringify({ status: "sucesso", message: `Motoboy ${nome} salvo/atualizado!` }) 
+      body: JSON.stringify({ status: "sucesso", message: `${nome} salvo com sucesso!` }) 
     };
 
   } catch (error) {
