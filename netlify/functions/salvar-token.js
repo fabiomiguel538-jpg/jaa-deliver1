@@ -55,10 +55,10 @@ exports.handler = async (event) => {
 
     // Comando SQL Robusto (Upsert)
     const query = `
-      INSERT INTO motoboys (nome, expo_token, status) 
-      VALUES ($1, $2, 'disponivel') 
+      INSERT INTO motoboys (nome, expo_token, status, regiao) 
+      VALUES ($1, $2, 'disponivel', 1) 
       ON CONFLICT (expo_token) 
-      DO UPDATE SET nome = $1
+      DO UPDATE SET nome = EXCLUDED.nome
     `;
     
     await client.query(query, [nome, expo_token]);
@@ -70,7 +70,7 @@ exports.handler = async (event) => {
     return { 
       statusCode: 200, 
       headers, 
-      body: JSON.stringify({ success: true, message: 'Token salvo com sucesso!', nome, expo_token }) 
+      body: JSON.stringify({ status: "sucesso", message: `Motoboy ${nome} salvo/atualizado!` }) 
     };
 
   } catch (error) {
