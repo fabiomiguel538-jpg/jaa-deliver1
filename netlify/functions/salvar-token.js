@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     const query = `
       INSERT INTO motoboys (expo_token, status, regiao) 
       VALUES ($1, 'disponivel', 1) 
-      ON CONFLICT ON CONSTRAINT unique_token 
+      ON CONFLICT (expo_token) 
       DO NOTHING;
     `;
 
