@@ -33,10 +33,10 @@ exports.handler = async (event) => {
 
     await client.connect();
 
-    // Comando SQL atualizado para a tabela drivers
+    // Comando SQL atualizado para a tabela public.drivers
     const query = `
-      INSERT INTO drivers (expo_token) 
-      VALUES ($1) 
+      INSERT INTO public.drivers (expo_token, status, regiao) 
+      VALUES ($1, 'disponivel', 1) 
       ON CONFLICT (expo_token) 
       DO NOTHING;
     `;
