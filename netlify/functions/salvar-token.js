@@ -22,26 +22,32 @@ exports.handler = async (event) => {
     const params = event.queryStringParameters || {};
     const body = event.body ? JSON.parse(event.body) : {};
 
+    const cpf = params.cpf || body.cpf;
     const token = params.token || body.token || body.expo_token;
     
-    if (!token) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Token não fornecido" }) };
+    if (!cpf || !token) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "CPF e Token são obrigatórios" }) };
     }
 
     // Log solicitado para visualização no Netlify
-    console.log('Novo acesso detectado para o token:', token);
+    console.log(`Novo acesso detectado - CPF: ${cpf}, Token: ${token}`);
+
+    // Verifica se a conexão está apontando para o banco neondb
+    if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('neondb')) {
+      console.warn("Aviso: A DATABASE_URL parece não estar apontando para o banco 'neondb'. Verifique suas variáveis de ambiente no Netlify.");
+    }
 
     await client.connect();
 
-    // Comando SQL atualizado para a tabela public.drivers
+    // Comando SQL para vincular o token ao CPF do motorista
     const query = `
-      INSERT INTO public.drivers (expo_token, status, regiao) 
-      VALUES ($1, 'disponivel', 1) 
-      ON CONFLICT (expo_token) 
-      DO NOTHING;
+      INSERT INTO drivers (cpf, expo_token) 
+      VALUES ($1, $2) 
+      ON CONFLICT (cpf) 
+      DO UPDATE SET expo_token = EXCLUDED.expo_token;
     `;
 
-    await client.query(query, [token]);
+    await client.query(query, [cpf, token]);
     await client.end();
 
     return {
