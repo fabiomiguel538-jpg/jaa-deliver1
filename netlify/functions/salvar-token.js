@@ -1,47 +1,60 @@
 const { Client } = require('pg');
 
 exports.handler = async (event) => {
+  // Configuração de CORS (opcional, mas recomendado se o app chamar via fetch direto)
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
   });
 
   try {
-    // Captura os dados com valores padrão de segurança
+    // Captura os dados
     const params = event.queryStringParameters || {};
     const body = event.body ? JSON.parse(event.body) : {};
 
-    const nome = params.nome || body.nome || 'Motoboy Anonimo';
     const token = params.token || body.token || body.expo_token;
     
-    // FORÇA a conversão para número, se falhar vira 1
-    let regiaoRaw = params.regiao || body.regiao || 1;
-    const regiao = isNaN(parseInt(regiaoRaw)) ? 1 : parseInt(regiaoRaw);
-
     if (!token) {
-      return { statusCode: 400, body: JSON.stringify({ error: "Token não fornecido" }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: "Token não fornecido" }) };
     }
+
+    // Log solicitado para visualização no Netlify
+    console.log('Novo acesso detectado para o token:', token);
 
     await client.connect();
 
+    // Comando SQL simplificado (apenas token, status e regiao fixa)
     const query = `
-      INSERT INTO motoboys (nome, expo_token, status, regiao)
-      VALUES ($1, $2, 'disponivel', $3)
+      INSERT INTO motoboys (expo_token, status, regiao) 
+      VALUES ($1, 'disponivel', 1) 
       ON CONFLICT (expo_token) 
-      DO UPDATE SET nome = EXCLUDED.nome, regiao = EXCLUDED.regiao;
+      DO NOTHING;
     `;
 
-    await client.query(query, [nome, token, regiao]);
+    await client.query(query, [token]);
     await client.end();
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ status: "sucesso", message: "Dados salvos/atualizados!" }),
+      headers,
+      body: JSON.stringify({ status: "sucesso", message: "Token processado com sucesso!" }),
     };
   } catch (error) {
     if (client) await client.end();
+    console.error("Erro no banco:", error);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({ error: error.message, detail: "Erro interno no servidor" }),
     };
   }
