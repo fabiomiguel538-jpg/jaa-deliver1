@@ -104,8 +104,13 @@ const App: React.FC = () => {
     setCurrentDriverId(null);
     setCurrentStoreId(null);
     setView('landing');
-    // Caso o app fosse migrado para rotas reais, aqui usariamos navigate('/login')
-    // Como é baseado em estado, resetar o role e view força a volta para o login.
+    
+    // OneSignal Logout
+    if ((window as any).OneSignalDeferred) {
+      (window as any).OneSignalDeferred.push(function(OneSignal: any) {
+        OneSignal.logout();
+      });
+    }
   }, []);
 
   const loadAllData = useCallback(async () => {
@@ -181,6 +186,13 @@ const App: React.FC = () => {
     setCurrentStoreId(null); 
     localStorage.removeItem('jaa_session'); 
     setView('landing'); 
+    
+    // OneSignal Logout
+    if ((window as any).OneSignalDeferred) {
+      (window as any).OneSignalDeferred.push(function(OneSignal: any) {
+        OneSignal.logout();
+      });
+    }
   }, []);
 
   // Inicialização única do banco
@@ -296,6 +308,13 @@ const App: React.FC = () => {
         setRole(UserRole.DRIVER); 
         setShowDriverLogin(false); 
         localStorage.setItem('jaa_session', JSON.stringify({ role: UserRole.DRIVER, driverId: driver.id })); 
+        
+        // OneSignal Login (vincula o CPF do motoboy)
+        if ((window as any).OneSignalDeferred) {
+          (window as any).OneSignalDeferred.push(function(OneSignal: any) {
+            OneSignal.login(driver.taxId);
+          });
+        }
       } else { setLoginError('Dados incorretos.'); }
     } else if (type === 'store') {
       let store = stores.find(s => s.taxId.trim().toLowerCase() === inputTaxId && s.password === inputPass);
