@@ -141,6 +141,27 @@ exports.handler = async (event) => {
       }
     }
 
+    // 4.5. Envio via OneSignal
+    try {
+      const oneSignalResponse = await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`
+        },
+        body: JSON.stringify({
+          app_id: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
+          included_segments: ["All"],
+          contents: { "en": `Nova corrida de R$ ${valor} disponível! 🚀` },
+          headings: { "en": "Pede Jaa - Nova Corrida" }
+        })
+      });
+      const osResult = await oneSignalResponse.json();
+      console.log('Resposta do OneSignal:', JSON.stringify(osResult));
+    } catch (osError) {
+      console.error('Erro ao enviar para o OneSignal:', osError);
+    }
+
     // 5. Resposta com log confirmando
     console.log(`✅ Sucesso: ${notifiedCount} motoboys notificados para o pedido ${pedidoId}`);
 
