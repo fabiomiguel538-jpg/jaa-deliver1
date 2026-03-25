@@ -76,11 +76,12 @@ exports.handler = async (event) => {
     });
 
     try {
+      console.log('Início da Key:', process.env.ONESIGNAL_REST_API_KEY?.substring(0, 4));
       const oneSignalResponse = await fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic ' + String(process.env.ONESIGNAL_REST_API_KEY).trim()
+          'Authorization': 'Basic ' + process.env.ONESIGNAL_REST_API_KEY
         },
         body: JSON.stringify({
           app_id: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
