@@ -45,74 +45,77 @@ export const sendNewOrderPushNotification = async (data: OrderNotificationData) 
     const uniqueTokens = [...new Set(tokens)];
     console.log(`Enviando notificações para ${uniqueTokens.length} tokens únicos na região ${regiao}`);
 
-    // Dispara a notificação para cada token
-    const promises = uniqueTokens.map(async (token) => {
+    const expoTokens = uniqueTokens.filter(t => t.startsWith('ExponentPushToken') || t.startsWith('ExpoPushToken'));
+
+    // Dispara a notificação para cada token Expo
+    const promises = expoTokens.map(async (token) => {
       try {
-        if (token.startsWith('ExponentPushToken') || token.startsWith('ExpoPushToken')) {
-          // Envia diretamente para a API do Expo (não precisa de servidor)
-          const driverEarning = order.driverEarning || 0;
-          const distance = order.distance || 1;
-          const pickupAddress = order.pickup?.address?.split(',')[0] || 'Local não informado';
+        const driverEarning = order.driverEarning || 0;
+        const distance = order.distance || 1;
+        const pickupAddress = order.pickup?.address?.split(',')[0] || 'Local não informado';
 
-          const expoMessage = {
-            to: token,
-            sound: 'default',
-            priority: 'high',
-            title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
-            body: `Recolha: ${pickupAddress}. 1 parada.`,
-            channelId: "pedidos",
-            data: {
-              id: order.id,
-              orderId: order.id,
-              valor: driverEarning.toFixed(2),
-              storeId: order.storeId,
-              distancia_km: `${distance.toFixed(1)} km`,
-              valorPorKm: (driverEarning / distance).toFixed(2),
-              titulo: 'Nova Corrida Disponível! 🛵',
-              detalhes: `Pedido #${order.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
-            }
-          };
-
-          const response = await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'Accept-encoding': 'gzip, deflate',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(expoMessage),
-          });
-
-          if (!response.ok) {
-            console.error(`Erro ao enviar para Expo token ${token.substring(0, 10)}...: ${response.statusText}`);
-          } else {
-            console.log(`Notificação enviada com sucesso para Expo token ${token.substring(0, 10)}...`);
+        const expoMessage = {
+          to: token,
+          sound: 'default',
+          priority: 'high',
+          title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
+          body: `Recolha: ${pickupAddress}. 1 parada.`,
+          channelId: "pedidos",
+          data: {
+            id: order.id,
+            orderId: order.id,
+            valor: driverEarning.toFixed(2),
+            storeId: order.storeId,
+            distancia_km: `${distance.toFixed(1)} km`,
+            valorPorKm: (driverEarning / distance).toFixed(2),
+            titulo: 'Nova Corrida Disponível! 🛵',
+            detalhes: `Pedido #${order.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
           }
+        };
+
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Accept-encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(expoMessage),
+        });
+
+        if (!response.ok) {
+          console.error(`Erro ao enviar para Expo token ${token.substring(0, 10)}...: ${response.statusText}`);
         } else {
-          // Para FCM puro, ainda tenta usar a Netlify Function
-          const response = await fetch('/.netlify/functions/dispararNotificacao', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              tokenFCM: token,
-              dadosDoPedido: order
-            }),
-          });
-          
-          if (!response.ok) {
-            console.error(`Erro ao enviar para FCM token ${token.substring(0, 10)}...: ${response.statusText}`);
-          } else {
-            console.log(`Notificação enviada com sucesso para FCM token ${token.substring(0, 10)}...`);
-          }
+          console.log(`Notificação enviada com sucesso para Expo token ${token.substring(0, 10)}...`);
         }
       } catch (err) {
-        console.error(`Falha na requisição para token ${token.substring(0, 10)}...:`, err);
+        console.error(`Falha na requisição para Expo token ${token.substring(0, 10)}...:`, err);
       }
     });
 
     await Promise.allSettled(promises);
+
+    // Dispara a notificação via OneSignal (Web Push) UMA ÚNICA VEZ
+    try {
+      const response = await fetch('/.netlify/functions/dispararNotificacao', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dadosDoPedido: order
+        }),
+      });
+      
+      if (!response.ok) {
+        console.error(`Erro ao enviar para OneSignal via Netlify Function: ${response.statusText}`);
+      } else {
+        console.log(`Notificação OneSignal disparada com sucesso via Netlify Function.`);
+      }
+    } catch (err) {
+      console.error(`Falha na requisição para OneSignal:`, err);
+    }
+
     return true;
   } catch (error) {
     console.error("Erro ao enviar notificação push de novo pedido:", error);

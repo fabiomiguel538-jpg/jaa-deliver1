@@ -147,7 +147,7 @@ exports.handler = async (event) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`
+          'Authorization': 'Basic ' + String(process.env.ONESIGNAL_REST_API_KEY).trim()
         },
         body: JSON.stringify({
           app_id: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
