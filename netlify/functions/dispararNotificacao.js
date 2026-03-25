@@ -1,17 +1,3 @@
-const admin = require('firebase-admin');
-
-// Inicializa o Firebase Admin de forma segura
-if (!admin.apps.length) {
-  try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-  } catch (error) {
-    console.error('Erro ao inicializar o Firebase Admin:', error);
-  }
-}
-
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': event.headers.origin || '*',
@@ -34,31 +20,34 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { tokenFCM, dadosDoPedido } = JSON.parse(event.body);
+    const { dadosDoPedido } = JSON.parse(event.body);
 
-    if (!tokenFCM) {
+    if (!dadosDoPedido) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Token FCM não fornecido' })
+        body: JSON.stringify({ error: 'Dados do pedido não fornecidos' })
       };
     }
 
-    // Verifica se é um token do Expo
-    if (tokenFCM.startsWith('ExponentPushToken') || tokenFCM.startsWith('ExpoPushToken')) {
-      console.log(`Enviando notificação via Expo para o token: ${tokenFCM.substring(0, 20)}...`);
-      
-      const driverEarning = dadosDoPedido.driverEarning || 0;
-      const distance = dadosDoPedido.distance || 1;
-      const pickupAddress = dadosDoPedido.pickup?.address?.split(',')[0] || 'Local não informado';
+    const driverEarning = dadosDoPedido.driverEarning || 0;
+    const distance = dadosDoPedido.distance || 1;
+    const pickupAddress = dadosDoPedido.pickup?.address?.split(',')[0] || 'Local não informado';
 
-      const expoMessage = {
-        to: tokenFCM,
-        sound: 'default',
-        priority: 'high',
-        title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
-        body: `Recolha: ${pickupAddress}. 1 parada.`,
-        channelId: "pedidos",
+    // Dispara a notificação via OneSignal
+    console.log(`Tentando enviar notificação via OneSignal para o pedido: ${dadosDoPedido.id}`);
+    
+    const oneSignalResponse = await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`
+      },
+      body: JSON.stringify({
+        app_id: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
+        included_segments: ["All"],
+        contents: { "en": `Nova corrida de R$ ${driverEarning.toFixed(2)} disponível! 🚀` },
+        headings: { "en": "Pede Jaa - Nova Corrida" },
         data: {
           id: dadosDoPedido.id,
           orderId: dadosDoPedido.id,
@@ -69,85 +58,21 @@ exports.handler = async (event) => {
           titulo: 'Nova Corrida Disponível! 🛵',
           detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
         }
-      };
+      })
+    });
 
-      const https = require('https');
-      
-      const expoResponse = await new Promise((resolve, reject) => {
-        const req = https.request('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Accept-encoding': 'gzip, deflate',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.EXPO_ACCESS_TOKEN}`,
-          }
-        }, (res) => {
-          let data = '';
-          res.on('data', (chunk) => { data += chunk; });
-          res.on('end', () => {
-            try {
-              resolve(JSON.parse(data));
-            } catch (e) {
-              resolve(data);
-            }
-          });
-        });
-        
-        req.on('error', (e) => {
-          reject(e);
-        });
-        
-        req.write(JSON.stringify(expoMessage));
-        req.end();
-      });
-
-      console.log('Notificação enviada via Expo com sucesso:', expoResponse);
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({ success: true, messageId: expoResponse })
-      };
-    }
-
-    // Caso contrário, tenta enviar via Firebase Cloud Messaging (FCM)
-    const driverEarning = dadosDoPedido.driverEarning || 0;
-    const distance = dadosDoPedido.distance || 1;
-    const pickupAddress = dadosDoPedido.pickup?.address?.split(',')[0] || 'Local não informado';
-
-    const message = {
-      notification: {
-        title: `Nova Corrida: R$ ${driverEarning.toFixed(2)}`,
-        body: `Recolha: ${pickupAddress}. 1 parada.`,
-      },
-      data: {
-        id: dadosDoPedido.id,
-        orderId: dadosDoPedido.id,
-        valor: driverEarning.toFixed(2),
-        storeId: dadosDoPedido.storeId,
-        distancia_km: `${distance.toFixed(1)} km`,
-        valorPorKm: (driverEarning / distance).toFixed(2),
-        titulo: 'Nova Corrida Disponível! 🛵',
-        detalhes: `Pedido #${dadosDoPedido.id}\n💰 Valor: R$ ${driverEarning.toFixed(2)}\n📏 Distância: ${distance.toFixed(1)} km\n📍 Origem: ${pickupAddress}`,
-      },
-      token: tokenFCM,
-    };
-
-    // Dispara a notificação
-    console.log(`Tentando enviar notificação FCM para o token: ${tokenFCM.substring(0, 10)}...`);
-    const response = await admin.messaging().send(message);
-    console.log('Notificação FCM enviada com sucesso:', response);
+    const osResult = await oneSignalResponse.json();
+    console.log('Notificação OneSignal enviada com sucesso:', osResult);
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, messageId: response })
+      body: JSON.stringify({ success: true, messageId: osResult.id })
     };
   } catch (error) {
     console.error('Erro ao disparar notificação:', error);
     
-    // Retorna detalhes do erro para ajudar no debug (em produção você pode querer omitir detalhes sensíveis)
+    // Retorna detalhes do erro para ajudar no debug
     return {
       statusCode: 500,
       headers,
