@@ -23,7 +23,7 @@ exports.handler = async (event) => {
 
   try {
     // Inicializa a conexão com o Neon
-    const sql = neon(process.env.VITE_NEON_DB_URL || process.env.DATABASE_URL);
+    const sql = neon(process.env.DATABASE_URL || process.env.VITE_NEON_DB_URL);
 
     // O corpo da requisição pode vir de um Webhook do Neon (ao inserir um pedido)
     // ou de uma chamada direta do frontend.
