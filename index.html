@@ -52,8 +52,8 @@
       await OneSignal.init({
         appId: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
       });
-    } catch (error) {
-      console.warn("OneSignal ignorado: O domínio atual não corresponde ao configurado no painel do OneSignal.", error);
+    } catch (e) {
+      console.warn("OneSignal ignorado: O domínio atual não corresponde ao configurado no painel do OneSignal.", e);
     }
   });
 </script>
