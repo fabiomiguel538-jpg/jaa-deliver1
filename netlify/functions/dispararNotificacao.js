@@ -38,13 +38,14 @@ exports.handler = async (event) => {
     console.log(`Tentando enviar notificação via OneSignal para o pedido: ${dadosDoPedido.id}`);
     
     const chave = 'os_v2_app_rtxwwwz7vradrhdqcihjb7kpk746joulnope7yufneqbz332ihbtdbbw4mjgtpj4idv7seh45qmyqe76js2q344conyky6fwsk7kmsa';
-    console.log('Enviando com Header:', 'key ' + chave.substring(0, 10) + '...');
+    console.log('Enviando com Header:', 'Basic ' + chave.substring(0, 10) + '...');
     
-    const oneSignalResponse = await fetch('https://api.onesignal.com/notifications', {
+    const oneSignalResponse = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'key os_v2_app_rtxwwwz7vradrhdqcihjb7kpk746joulnope7yufneqbz332ihbtdbbw4mjgtpj4idv7seh45qmyqe76js2q344conyky6fwsk7kmsa'
+        'Accept': 'application/json',
+        'Authorization': 'Basic os_v2_app_rtxwwwz7vradrhdqcihjb7kpk746joulnope7yufneqbz332ihbtdbbw4mjgtpj4idv7seh45qmyqe76js2q344conyky6fwsk7kmsa'
       },
       body: JSON.stringify({
         app_id: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
