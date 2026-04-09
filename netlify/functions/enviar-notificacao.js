@@ -76,11 +76,11 @@ exports.handler = async (event) => {
     });
 
     try {
-      const oneSignalResponse = await fetch('https://onesignal.com/api/v1/notifications', {
+      const oneSignalResponse = await fetch('https://api.onesignal.com/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic os_v2_app_rtxwwwz7vradrhdqcihjb7kpk4xondg7fptenu5uzvl43ebsugqpqhvr63ydre7ehldzksqphxupwsgjsoft3doi7rc3y4ktperlfqy'
+          'Authorization': 'key os_v2_app_rtxwwwz7vradrhdqcihjb7kpk4xondg7fptenu5uzvl43ebsugqpqhvr63ydre7ehldzksqphxupwsgjsoft3doi7rc3y4ktperlfqy'
         },
         body: JSON.stringify({
           app_id: "8cef6b5b-3fac-4038-9c70-120e90fd4f57",
